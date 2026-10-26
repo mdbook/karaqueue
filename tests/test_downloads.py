@@ -285,9 +285,11 @@ def test_saves_stop_at_the_size_cap_the_disk_floor_and_a_full_queue(tmp_path, mo
     saver = Saver(ytdlp)
     try:
         ids = [f"q{n:010d}" for n in range(QUEUE + 1)]
-        for video in ids:
-            saver.save(folder, video, "x")
+        saver.save(folder, ids[0], "x")
+        # Until the first one starts saving it still counts as waiting, so let it start first.
         assert wait_for(lambda: saver.jobs[ids[0]]["state"] == "saving")
+        for video in ids[1:]:
+            saver.save(folder, video, "x")
         with pytest.raises(Error) as caught:
             saver.save(folder, "zzzzzzzzzzz", "x")
         assert caught.value.status == 429
@@ -328,6 +330,7 @@ def test_a_full_queue_doesnt_use_up_a_rooms_saves_and_saves_never_show_another_r
         assert client.post(f"/api/rooms/{one}/saves", headers=one_host, json={"video": "dQw4w9WgXcQ", "title": "x"}).status_code == 200
         same = client.post(f"/api/rooms/{two}/saves", headers=two_host, json={"video": "dQw4w9WgXcQ", "title": "x"}).json()
         assert "room" not in same and one not in str(same)
+        assert wait_for(lambda: client.get("/api/admin/saves", headers=admin).json()[0]["state"] == "saving")
         # Admins aren't held to the hourly limit: they fill the queue.
         for n in range(QUEUE):
             assert client.post("/api/admin/saves", headers=admin, json={"video": f"q{n:010d}", "title": "x"}).status_code == 200
@@ -356,7 +359,13 @@ def test_a_stuck_download_ends_with_its_helpers_and_leftovers_get_swept(tmp_path
     with pytest.raises(subprocess.TimeoutExpired):
         run(["sh", "-c", script], timeout=1)
     child = int(pid_file.read_text())
-    assert wait_for(lambda: not os.path.exists(f"/proc/{child}") or "Z" in open(f"/proc/{child}/stat").read().split()[2])
+
+    def gone():
+        try:
+            return "Z" in open(f"/proc/{child}/stat").read().split()[2]
+        except (FileNotFoundError, ProcessLookupError):  # reaped, maybe between open and read
+            return True
+    assert wait_for(gone)
 
     old, new = time.time() - 7200, time.time()
     for name, when in (("abcdefghijk.mp4.part", old), ("abcdefghijk.f137.mp4", old), ("bcdefghijkl.mp4.part", new),
