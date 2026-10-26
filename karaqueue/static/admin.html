@@ -1,0 +1,790 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#211820">
+  <meta name="robots" content="noindex">
+  <title>Admin | KaraQueue</title>
+  <link rel="icon" href="/static/KaraQueue-Icon.png">
+  <script src="/static/theme.js"></script>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/admin.css">
+</head>
+<body class="admin-page" data-admin-view="settings">
+<a class="skip-link" href="#admin-main">Skip to administration</a>
+<main id="admin-main">
+  <div class="bar">
+    <a class="wordmark" href="/"><span class="brand-symbol" aria-hidden="true"><i></i><i></i><i></i></span>KaraQueue</a><div class="admin-bar-tools"><label class="theme-picker"><span class="sr">Color theme</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg><select data-theme-picker aria-label="Color theme"><option value="sunset">Sunset</option><option value="midnight">Midnight</option><option value="daylight">Daylight</option></select></label>
+    <button class="quiet small" id="sign-out" type="button" hidden>Sign out</button></div>
+  </div>
+
+  <div id="gate" class="panel" hidden>
+    <h1 id="gate-title">Admin</h1>
+    <p class="lede" id="gate-text"></p>
+    <form class="sign-in" id="sign-in">
+      <label for="account" id="account-label">Name <span class="muted">(leave empty for the admin password)</span></label>
+      <input id="account" autocomplete="username" spellcheck="false">
+      <label for="password" id="password-label">Password</label>
+      <input id="password" type="password" autocomplete="current-password" required>
+      <input id="password2" type="password" autocomplete="new-password" placeholder="Same again" aria-label="Same password again" hidden>
+      <button type="submit" id="sign-in-button">Sign in</button>
+    </form>
+  </div>
+
+  <div id="page" hidden>
+    <h1>Behind the scenes.</h1>
+    <p class="lede">Changes take effect right away, no restart. A setting changed here wins over its environment variable; reset it to go back.</p>
+    <nav class="admin-tabs" aria-label="Administration"><button type="button" data-admin-view="settings" aria-current="page">Settings</button><button type="button" data-admin-view="rooms">Rooms</button><button type="button" data-admin-view="library">Library</button><button type="button" data-admin-view="server">Server</button><button type="button" data-admin-view="access">Access</button></nav>
+    <div class="admin-settings"><label class="settings-filter" for="settings-filter">Find a setting<input id="settings-filter" type="search" placeholder="Search settings…" autocomplete="off"></label><p class="muted" id="no-settings" hidden>No matching settings. Try a different name.</p><div id="groups"></div></div>
+
+    <section class="admin-rooms" aria-labelledby="rooms-heading">
+      <div class="section-head"><h2 id="rooms-heading">Every room</h2><span class="muted small" id="room-count"></span></div>
+      <div class="panel list"><ol class="rooms" id="rooms"></ol></div>
+    </section>
+
+    <section class="admin-library" aria-labelledby="storage-heading">
+      <div class="section-head"><h2 id="storage-heading">Space</h2></div>
+      <div class="panel list" id="storage"></div>
+    </section>
+
+    <section class="admin-library" aria-labelledby="folders-heading">
+      <div class="section-head"><h2 id="folders-heading">Library folders</h2>
+        <button class="ghost small" type="button" id="rescan">Rescan</button></div>
+      <p class="item-help">KaraQueue reads songs from these folders on the server. Removing one only stops using it; nothing on disk is touched.</p>
+      <div class="panel list"><ol class="rooms folders" id="folders"></ol></div>
+      <form class="panel add-person" id="add-folder">
+        <h3>Add a folder</h3>
+        <div class="row">
+          <input id="new-folder" autocomplete="off" spellcheck="false" placeholder="/full/path/on/the/server" aria-label="Folder path" required>
+          <button type="submit">Add</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="admin-library" aria-labelledby="save-heading" id="save-section" hidden>
+      <div class="section-head"><h2 id="save-heading">Save songs from YouTube</h2></div>
+      <p class="item-help">Search YouTube or paste a link, check the name, and save. Saved songs stay in <code id="save-folder"></code> for good and show up in the library.</p>
+      <form class="panel add-person" id="yt-search">
+        <div class="row">
+          <input id="yt-q" type="search" placeholder="Song, artist or a YouTube link" maxlength="300" autocomplete="off" aria-label="Search YouTube or paste a link">
+          <button type="submit">Search</button>
+        </div>
+      </form>
+      <div class="panel list"><ol class="rooms songs" id="yt-results"></ol></div>
+      <div class="panel list"><ol class="rooms songs" id="saves"></ol></div>
+    </section>
+
+    <section class="admin-library" aria-labelledby="songs-heading" id="songs-section">
+      <div class="section-head"><h2 id="songs-heading">Songs</h2><span class="muted small" id="song-count"></span></div>
+      <label class="settings-filter" for="song-filter">Find a song<input id="song-filter" type="search" placeholder="Title, artist or file…" autocomplete="off"></label>
+      <div class="panel bulk" id="bulk" hidden></div>
+      <div class="panel list"><ol class="rooms songs" id="songs"></ol></div>
+      <button class="ghost small more" type="button" id="more-songs" hidden>Show more</button>
+    </section>
+
+    <section class="admin-library" aria-labelledby="dl-heading" id="dl-section">
+      <div class="section-head"><h2 id="dl-heading">Downloaded songs</h2>
+        <button class="ghost small" type="button" id="clear-downloads">Clear all</button></div>
+      <p class="item-help">YouTube songs the server saved so they play on the screens. Deleted ones download again the next time someone queues them.</p>
+      <div class="panel list"><ol class="rooms downloads" id="downloads"></ol></div>
+    </section>
+
+    <section class="admin-server" aria-labelledby="server-heading">
+      <div class="section-head"><h2 id="server-heading">Set when the server starts</h2></div>
+      <div class="panel list startup" id="startup"></div>
+    </section>
+
+    <section class="admin-access" aria-labelledby="people-heading">
+      <div class="section-head"><h2 id="people-heading">People</h2><span class="muted small" id="people-count"></span></div>
+      <p class="item-help">Admins can use this page. Hosts can start rooms when Who can start rooms is set to account holders. Guests make their own accounts, to get back to their spot from any phone. Open someone's sign-ins to see where they're signed in, or sign them out.</p>
+      <label class="settings-filter" for="people-filter">Find someone<input id="people-filter" type="search" placeholder="Search people…" autocomplete="off"></label>
+      <div class="panel list"><ol class="rooms people" id="people"></ol></div>
+      <form class="panel add-person" id="invite-person">
+        <h3>Invite someone</h3>
+        <p class="item-help">Makes a link they open to pick their own name and password, so no password gets passed around. It works once, for a week.</p>
+        <div class="row">
+          <select id="invite-role" aria-label="Role for the new account"><option value="host">Host</option><option value="admin">Admin</option></select>
+          <button type="submit">Make a link</button>
+        </div>
+        <ol class="rooms people invites" id="invites"></ol>
+      </form>
+      <form class="panel add-person" id="add-person">
+        <h3>Or add an account with a password</h3>
+        <div class="row">
+          <input id="new-name" autocomplete="off" spellcheck="false" placeholder="Name" aria-label="Name" required>
+          <select id="new-role" aria-label="Role"><option value="host">Host</option><option value="admin">Admin</option></select>
+        </div>
+        <div class="row">
+          <input id="new-pw" type="password" autocomplete="new-password" placeholder="Password, at least 8 characters" aria-label="Their password" required minlength="8">
+          <button type="submit">Add</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="admin-access" aria-labelledby="pw-heading" id="pw-section">
+      <div class="section-head"><h2 id="pw-heading">Admin password</h2></div>
+      <form class="panel sign-in" id="change-password">
+        <input id="new-password" type="password" autocomplete="new-password" placeholder="New password, at least 8 characters" aria-label="New password" required minlength="8">
+        <button class="ghost" type="submit">Change password</button>
+      </form>
+      <p class="muted small" id="pw-env" hidden>Set by <code>KARAQUEUE_ADMIN_PASSWORD</code>, so change it there.</p>
+    </section>
+  </div>
+</main>
+<div id="flash" role="status" aria-live="polite" hidden></div>
+
+<script src="/static/kq.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const setup = new URLSearchParams(location.hash.slice(1)).get("setup");
+  // A link an admin sent: make an account, or pick a new password for one.
+  let invite = new URLSearchParams(location.hash.slice(1)).get("invite"), inviteFor = null;
+  if (setup || invite) history.replaceState(null, "", location.pathname);
+
+  // The admin key is kept like a room key, under its own name.
+  async function call(method, path, body) {
+    const saved = keys.get("admin");
+    const headers = { "Content-Type": "application/json" };
+    if (saved) headers.Authorization = "Bearer " + saved.token;
+    const res = await fetch("/api/admin" + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    const data = await res.json().catch(() => ({}));
+    if ((res.status === 401 || (res.status === 403 && path === "")) && path !== "/login") { keys.drop("admin"); gate(); }
+    if (!res.ok) {
+      const err = new Error(typeof data.detail === "string" ? data.detail : "Something went wrong");
+      err.status = res.status;
+      throw err;
+    }
+    return data;
+  }
+
+  async function gate() {
+    $("page").hidden = true;
+    $("sign-out").hidden = true;
+    $("gate").hidden = false;
+    if (invite) return inviteGate();
+    const status = await call("GET", "/status");
+    const choosing = !!setup && status.setup;
+    $("gate-title").textContent = choosing ? "Pick an admin password" : "Admin";
+    $("gate-text").textContent = choosing
+      ? "This sets the password for the admin page. The setup link stops working once you've used it."
+      : status.setup
+        ? "There's no admin password yet. Open the setup link in admin-setup-link.txt, next to the server's database, or set KARAQUEUE_ADMIN_PASSWORD."
+        : "Sign in to change how this server works.";
+    $("sign-in").hidden = status.setup && !choosing;
+    $("account").hidden = $("account-label").hidden = choosing;
+    $("password2").hidden = !choosing;
+    $("password2").required = choosing;
+    $("password").autocomplete = choosing ? "new-password" : "current-password";
+    $("password-label").textContent = choosing ? "New password, at least 8 characters" : "Password";
+    $("sign-in-button").textContent = choosing ? "Set password" : "Sign in";
+    $("sign-in").dataset.setup = choosing ? "1" : "";
+  }
+
+  async function inviteGate() {
+    const res = await fetch("/api/invites/look", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ link: invite }),
+    });
+    inviteFor = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      invite = inviteFor = null;
+      await gate();
+      flash(res.status === 404 ? "That link has already been used or is out of date. Ask an admin for a new one." : "Couldn't open that link", "error");
+      return;
+    }
+    const fresh = !!inviteFor.role;
+    $("gate-title").textContent = fresh ? "Make your account" : "Pick a new password";
+    $("gate-text").textContent = fresh
+      ? "You're invited to be " + (inviteFor.role === "admin" ? "an admin" : "a host") + " here. Pick the name and password you'll sign in with. This link works once."
+      : "For " + inviteFor.name + ". You'll be signed out everywhere else. This link works once.";
+    $("sign-in").hidden = false;
+    $("account").hidden = $("account-label").hidden = !fresh;
+    $("account").required = fresh;
+    $("account-label").textContent = "Your name";
+    $("account").autocomplete = "username";
+    $("password2").hidden = false;
+    $("password2").required = true;
+    $("password").autocomplete = "new-password";
+    $("password-label").textContent = (fresh ? "Password" : "New password") + ", at least 8 characters";
+    $("sign-in-button").textContent = fresh ? "Make my account" : "Set password";
+  }
+
+  async function acceptInvite() {
+    if ($("password").value !== $("password2").value) throw new Error("Those passwords don't match");
+    const res = await fetch("/api/invites/accept", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ link: invite, name: $("account").value.trim(), password: $("password").value }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Something went wrong");
+    $("password").value = $("password2").value = "";
+    invite = inviteFor = null;
+    keys.set("account", { token: data.token, name: data.name });  // the home page uses this to start rooms
+    if (data.role === "admin") {
+      keys.set("admin", { token: data.token });
+      return load();
+    }
+    $("sign-in").hidden = true;
+    $("gate-title").textContent = "You're all set, " + data.name;
+    $("gate-text").replaceChildren("You're signed in on this device. ", h("a", { href: "/" }, "Start a room"),
+      " from the home page whenever you like.");
+  }
+
+  $("sign-in").onsubmit = act(async (e) => {
+    e.preventDefault();
+    if (invite) return acceptInvite();
+    const body = { password: $("password").value };
+    if ($("sign-in").dataset.setup) {
+      if (body.password !== $("password2").value) throw new Error("Those passwords don't match");
+      body.setup = setup;
+    } else if ($("account").value.trim()) {
+      body.name = $("account").value.trim();
+    }
+    const { token, role } = await call("POST", "/login", body);
+    $("password").value = $("password2").value = "";
+    if (role !== "admin") throw new Error("That's a host account. Hosts can start rooms, but only admins can use this page.");
+    keys.set("admin", { token });
+    load();
+  });
+
+  $("sign-out").onclick = act(async () => {
+    await call("POST", "/logout").catch(() => {});
+    if (keys.get("account")?.token === keys.get("admin")?.token) keys.drop("account");  // the same sign-in, now over
+    keys.drop("admin");
+    gate();
+  });
+
+  $("change-password").onsubmit = act(async (e) => {
+    e.preventDefault();
+    await call("PUT", "/password", { password: $("new-password").value });
+    $("new-password").value = "";
+    flash("Password changed", "ok");
+  });
+
+  const load = act(async () => {
+    if (!keys.get("admin")) return gate();
+    render(await call("GET", ""));
+    $("gate").hidden = true;
+    $("page").hidden = false;
+    $("sign-out").hidden = false;
+  });
+
+  // ---- Rendering ----
+
+  const SOURCE = { admin: "Set here", env: "From the environment", default: "Default" };
+  const size = (n) => n >= 1024 ** 3 ? (n / 1024 ** 3).toFixed(1) + " GB" : n >= 1024 ** 2 || !n ? Math.round(n / 1024 ** 2) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB";
+  function ago(t) {
+    const s = Date.now() / 1000 - t;
+    if (s < 90) return "just now";
+    if (s < 5400) return Math.round(s / 60) + " minutes ago";
+    if (s < 129600) return Math.round(s / 3600) + " hours ago";
+    return Math.round(s / 86400) + " days ago";
+  }
+
+  function settingItem(s) {
+    const id = "set-" + s.key;
+    const error = h("p", { class: "error", hidden: true, id: id + "-error" });
+    const fail = (err) => { error.textContent = err.message; error.hidden = false; };
+    const done = (data) => { render(data); flash(s.label + " saved", "ok"); };
+    let input;
+    if (s.secret) {
+      input = h("input", { id, type: "password", autocomplete: "off", placeholder: s.value ? "Set. Type a new one to replace it" : "Not set",
+        "aria-describedby": id + "-help " + id + "-error" });
+    } else if (s.choices) {
+      input = h("select", { id, "aria-describedby": id + "-help " + id + "-error" },
+        Object.entries(s.choices).map(([value, label]) => h("option", { value }, label)));
+      input.value = s.value;
+    } else {
+      input = h("input", { id, type: s.type === "str" ? "text" : "number", autocomplete: "off", spellcheck: "false",
+        class: s.type === "str" ? "" : "number", step: s.type === "int" ? "1" : "any",
+        min: s.min, max: s.max, "aria-describedby": id + "-help " + id + "-error" });
+      input.value = s.value;
+    }
+    if (s.env_only) input.disabled = true;
+    const save = async () => {
+      error.hidden = true;
+      if (!s.secret && input.value === String(s.value)) return;
+      if (s.secret && !input.value) return;
+      const value = s.type === "str" ? input.value : Number(input.value);
+      try { done(await call("PUT", "/settings/" + s.key, { value })); } catch (err) { fail(err); }
+    };
+    input.addEventListener("change", save);
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") input.blur(); });
+    const reset = s.source === "admin"
+      ? h("button", { class: "quiet small", type: "button", onclick: async () => {
+          try { done(await call("DELETE", "/settings/" + s.key)); } catch (err) { fail(err); }
+        } }, s.secret ? "Clear" : "Reset")
+      : null;
+    return h("div", { class: "item" },
+      h("div", { class: "item-text" },
+        h("label", { class: "item-label", for: id }, s.label),
+        h("p", { class: "item-help", id: id + "-help" }, s.help)),
+      h("div", { class: "item-body" },
+        h("div", { class: "row" }, input, reset),
+        h("div", { class: "item-head" },
+          h("span", { class: "source" + (s.source === "admin" ? " here" : ""), title: s.env }, SOURCE[s.source] + (s.source === "env" ? " (" + s.env + ")" : "")),
+          s.source !== "default" && !s.secret ? h("span", { class: "source" }, "Default: " + (s.default === "" ? "empty" : s.choices ? s.choices[s.default] : s.default)) : null),
+        error));
+  }
+
+  function extras(group, data) {
+    if (group === "Song library" && data.library) {
+      const c = data.library;
+      const total = Object.values(c).reduce((a, b) => a + b, 0);
+      return h("div", { class: "item" },
+        h("div", { class: "item-text" }, h("span", { class: "item-label" }, "In the library")),
+        h("div", { class: "item-body" },
+          h("div", { class: "facts" }, h("span", {}, h("strong", {}, total), " songs"),
+            c.file ? h("span", {}, c.file + " videos") : null,
+            (c.cdg || 0) + (c.zip || 0) ? h("span", {}, (c.cdg || 0) + (c.zip || 0) + " MP3+CDG") : null,
+            c.convert ? h("span", {}, c.convert + " converted on the fly") : null),
+          h("div", { class: "row" }, h("button", { class: "ghost small", type: "button",
+            onclick: act(async () => { render(await call("POST", "/library/rescan")); flash("Library rescanned", "ok"); }) }, "Rescan now"))));
+    }
+    if (group === "YouTube" && data.downloads) {
+      const d = data.downloads;
+      return h("div", { class: "item" },
+        h("div", { class: "item-text" }, h("span", { class: "item-label" }, "Downloaded songs")),
+        h("div", { class: "item-body" },
+          h("div", { class: "facts" }, h("span", {}, h("strong", {}, d.files), " songs"),
+            h("span", {}, size(d.bytes) + " of " + size(d.max_bytes)),
+            d.pending ? h("span", {}, d.pending + " downloading") : null),
+          h("div", { class: "row" }, h("button", { class: "ghost small", type: "button", disabled: !d.files,
+            onclick: act(async () => {
+              if (!confirm("Delete every downloaded song? They download again the next time someone queues them.")) return;
+              render(await call("DELETE", "/downloads"));
+              flash("Downloads cleared", "ok");
+            }) }, "Clear downloads"))));
+    }
+    return null;
+  }
+
+  function render(data) {
+    // Don't yank a field out from under someone typing in it.
+    const focused = document.activeElement && document.activeElement.id;
+    const groups = [...new Set(data.settings.map((s) => s.group))];
+    show("groups", groups.map((g) => h("section", { "aria-labelledby": "g-" + g },
+      h("div", { class: "section-head" }, h("h2", { id: "g-" + g }, g)),
+      h("div", { class: "panel list" }, data.settings.filter((s) => s.group === g).map(settingItem), extras(g, data)))));
+    filterSettings();
+    if (focused && $(focused)) $(focused).focus();
+
+    $("room-count").textContent = data.rooms.length === 1 ? "1 room" : data.rooms.length + " rooms";
+    show("rooms", data.rooms.length ? data.rooms.map((r) => h("li", {},
+      h("a", { class: "code", href: "/r/" + r.code }, r.code),
+      h("div", { class: "grow" },
+        h("div", {}, r.name),
+        h("span", {}, [r.singers + (r.singers === 1 ? " singer" : " singers"), r.queued + " queued",
+          r.recordings ? r.recordings + " recordings" : null, "changed " + ago(r.touched_at)].filter(Boolean).join(" · ")),
+        r.open ? h("span", { class: "live" }, " · " + r.open + " open now") : null),
+      h("button", { class: "danger small", type: "button", onclick: act(async () => {
+        if (!confirm("Delete " + r.name + " (" + r.code + ")? Its queue and recordings go too.")) return;
+        render(await call("DELETE", "/rooms/" + r.code));
+        flash("Deleted " + r.code, "ok");
+      }) }, "Delete"))) : h("li", { class: "empty" }, "No rooms right now."));
+
+    show("startup", data.startup.map((s) => h("div", { class: "item" },
+      h("div", { class: "item-text" }, h("code", {}, s.env)),
+      h("div", { class: "item-body" }, h("span", {}, s.value)))));
+    $("change-password").hidden = data.password_env;
+    $("pw-env").hidden = !data.password_env;
+    lastData = data;
+    renderPeople(data);
+  }
+
+  // ---- People: admin and host accounts, guest accounts, and where each one is signed in ----
+
+  const ROLE = { admin: "Admin", host: "Host", guest: "Guest" };
+  const opened = new Set();  // whose sign-ins are showing, kept across redraws
+  const links = {};  // links just made, by who they're for; the server can't show them again
+  let lastData = null;
+
+  function linkBox(url) {
+    return h("div", { class: "row link-box" },
+      h("input", { readonly: true, value: url, "aria-label": "Link to send", onfocus: (e) => e.target.select() }),
+      h("button", { class: "small", type: "button", onclick: act(async () => {
+        await navigator.clipboard.writeText(url);
+        flash("Link copied", "ok");
+      }) }, "Copy"));
+  }
+
+  function signIns(p, sessions, me) {
+    const key = p.kind + ":" + p.id;
+    const box = h("details", { class: "sessions", open: opened.has(key) },
+      h("summary", {}, "Signed in on " + sessions.length + (sessions.length === 1 ? " device" : " devices")),
+      h("ol", {}, sessions.map((s) => h("li", {},
+        h("div", { class: "grow" }, h("div", {}, s.device || "Unknown browser"),
+          h("span", {}, "used " + ago(s.seen_at) + " · signed in " + ago(s.created_at))),
+        s.kind === "staff" && s.id === me.session ? h("span", { class: "muted small" }, "This device")
+          : h("button", { class: "ghost small", type: "button", onclick: act(async () => {
+            render(await call("DELETE", "/sessions/" + s.kind + "/" + s.id));
+            flash("Signed out " + (s.device || "that device"), "ok");
+          }) }, "Sign out")))),
+      p.builtin ? h("p", { class: "item-help" }, "Changing the admin password signs out everyone using the old one.")
+        : h("button", { class: "ghost small", type: "button", onclick: act(async () => {
+          render(await call("DELETE", (p.kind === "guest" ? "/guests/" : "/users/") + p.id + "/sessions"));
+          flash(p.name + " signed out everywhere" + (p.id === me.id ? " else" : ""), "ok");
+        }) }, p.kind === "staff" && p.id === me.id ? "Sign out everywhere else" : "Sign out everywhere"));
+    box.ontoggle = () => box.open ? opened.add(key) : opened.delete(key);
+    return box;
+  }
+
+  function personItem(p, sessions, me) {
+    const self = p.kind === "staff" && p.id === me.id;
+    const path = (p.kind === "guest" ? "/guests/" : "/users/") + p.id;
+    const change = (body, done) => act(async () => { render(await call("PATCH", path, body)); flash(done, "ok"); })();
+    const actions = [];
+    if (p.kind === "staff" && !p.builtin) {
+      const role = h("select", { "aria-label": "Role for " + p.name, disabled: self },
+        h("option", { value: "host" }, "Host"), h("option", { value: "admin" }, "Admin"));
+      role.value = p.role;
+      role.onchange = () => change({ role: role.value }, p.name + " is now " + (role.value === "admin" ? "an admin" : "a host"));
+      actions.push(role, h("button", { class: "ghost small", type: "button", onclick: act(async () => {
+        const data = await call("POST", "/invites", { user: p.id });
+        links["user:" + p.id] = location.origin + data.link;
+        render(data);
+        flash("Send " + p.name + " the link below", "ok");
+      }) }, "Password link"));
+    }
+    if (!p.builtin) {
+      actions.push(h("button", { class: "ghost small", type: "button", onclick: () => {
+        const pw = prompt("New password for " + p.name + " (at least 8 characters). " + (self ? "Your other devices" : "They") + " get signed out:");
+        if (pw) change({ password: pw }, "Password changed for " + p.name);
+      } }, "Set password"));
+      if (!self) actions.push(
+        h("button", { class: "ghost small", type: "button",
+          onclick: () => change({ disabled: !p.disabled }, p.name + (p.disabled ? " turned back on" : " turned off")) },
+          p.disabled ? "Turn on" : "Turn off"),
+        h("button", { class: "danger small", type: "button", onclick: act(async () => {
+          if (!confirm(p.kind === "guest" ? "Delete " + p.name + "'s guest account? They stay in their rooms, but can't sign in again."
+            : "Delete " + p.name + "'s account? Rooms they started keep going.")) return;
+          render(await call("DELETE", path));
+          flash("Deleted " + p.name, "ok");
+        }) }, "Delete"));
+    }
+    const link = links["user:" + p.id];
+    return h("li", {},
+      h("div", { class: "grow" },
+        h("div", {}, p.name, self ? h("span", { class: "muted" }, " (you)") : null),
+        h("span", {}, [ROLE[p.role], p.kind === "guest" ? (p.rooms === 1 ? "in 1 room" : "in " + p.rooms + " rooms") : null,
+          p.builtin ? "no name, just the password" : p.seen_at ? "last used " + ago(p.seen_at) : "never signed in"].filter(Boolean).join(" · ")),
+        p.disabled ? h("span", { class: "off" }, " · Turned off") : null),
+      h("div", { class: "actions" }, actions),
+      link ? h("div", { class: "fresh-link" },
+        h("p", { class: "item-help" }, "Send " + p.name + " this link to pick a new password. It works once, for a day, and signs them out everywhere."),
+        linkBox(link)) : null,
+      sessions.length ? signIns(p, sessions, me) : null);
+  }
+
+  function renderPeople(data) {
+    const me = data.me || {};
+    const mine = (kind, id) => data.sessions.filter((s) => s.kind === kind && s.account === id);
+    // A link stops showing once it's used, cancelled or out of date.
+    for (const key of Object.keys(links)) {
+      if (key.startsWith("user:") && !data.invites.some((i) => "user:" + i.user_id === key)) delete links[key];
+    }
+    if (links.invite && !data.invites.some((i) => i.role)) delete links.invite;
+    const people = [
+      ...(mine("staff", null).length ? [{ kind: "staff", id: null, name: "Admin password", role: "admin", builtin: true }] : []),
+      ...data.users.map((u) => ({ ...u, kind: "staff" })),
+      ...data.guests.map((g) => ({ ...g, kind: "guest", role: "guest" })),
+    ];
+    const staff = data.users.length, guests = data.guests.length;
+    $("people-count").textContent = [staff === 1 ? "1 account" : staff + " accounts",
+      guests === 1 ? "1 guest" : guests + " guests"].join(" · ");
+    const q = $("people-filter").value.trim().toLowerCase();
+    const shown = people.filter((p) => !q || p.name.toLowerCase().includes(q) || p.role.startsWith(q));
+    show("people", shown.length ? shown.map((p) => personItem(p, mine(p.kind, p.id), me))
+      : h("li", { class: "empty" }, q ? "Nobody matches that." : "No accounts yet. The admin password works on its own until you add some."));
+
+    show("invites", links.invite ? h("li", { class: "fresh-link" },
+      h("p", { class: "item-help" }, "Send this to the person you're inviting."), linkBox(links.invite)) : null,
+    data.invites.map((i) => h("li", {},
+      h("div", { class: "grow" },
+        h("div", {}, i.role ? "Invite for a new " + (i.role === "admin" ? "admin" : "host") : "New password for " + i.name),
+        h("span", {}, "made by " + i.made_by + " " + ago(i.created_at) + " · works until " +
+          new Date(i.expires_at * 1000).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" }))),
+      h("button", { class: "ghost small", type: "button", onclick: act(async () => {
+        render(await call("DELETE", "/invites/" + i.id));
+        flash("That link won't work now", "ok");
+      }) }, "Cancel"))));
+  }
+
+  $("people-filter").oninput = () => lastData && renderPeople(lastData);
+
+  $("invite-person").onsubmit = act(async (e) => {
+    e.preventDefault();
+    const data = await call("POST", "/invites", { role: $("invite-role").value });
+    links.invite = location.origin + data.link;
+    render(data);
+    flash("Invite link ready to send", "ok");
+  });
+
+  $("add-person").onsubmit = act(async (e) => {
+    e.preventDefault();
+    const name = $("new-name").value.trim();
+    render(await call("POST", "/users", { name, role: $("new-role").value, password: $("new-pw").value }));
+    $("new-name").value = $("new-pw").value = "";
+    flash("Added " + name, "ok");
+  });
+
+  // ---- Library: space, folders, every song, downloaded songs ----
+
+  const KIND = { file: "Video", cdg: "MP3+CDG", zip: "MP3+CDG zip", convert: "Converted on the fly" };
+  const PLACE = { library: "Library folder", downloads: "Downloaded songs", recordings: "Recordings" };
+  const songsShown = { q: "", list: [], total: 0, picked: new Set() };
+  let lookupOn = false;
+
+  const loadLibrary = act(async () => renderLibrary(await call("GET", "/library")));
+
+  function renderLibrary(data) {
+    const space = [
+      ...data.places.map((p) => h("div", { class: "item" },
+        h("div", { class: "item-text" }, h("span", { class: "item-label" }, p.kind === "library" ? p.label : PLACE[p.kind]),
+          h("p", { class: "item-help" }, h("code", {}, p.path))),
+        h("div", { class: "item-body" }, h("div", { class: "facts" },
+          p.exists ? h("span", {}, h("strong", {}, size(p.bytes)), p.max_bytes ? " of " + size(p.max_bytes) : " used") : h("span", { class: "off" }, "Folder not found"),
+          p.songs !== undefined ? h("span", {}, p.songs + (p.songs === 1 ? " song" : " songs")) : null)))),
+      ...data.disks.map((d) => h("div", { class: "item" },
+        h("div", { class: "item-text" }, h("span", { class: "item-label" }, "Free on disk"),
+          h("p", { class: "item-help" }, d.paths.join(", "))),
+        h("div", { class: "item-body" },
+          h("div", { class: "facts" }, h("span", {}, h("strong", {}, size(d.free)), " free of " + size(d.total))),
+          h("div", { class: "meter", role: "img", "aria-label": Math.round(100 * (1 - d.free / d.total)) + "% used" },
+            h("i", { style: "width:" + (100 * (1 - d.free / d.total)).toFixed(1) + "%" }))))),
+    ];
+    show("storage", space.length ? space : h("p", { class: "empty" }, "No song folders, downloads or recordings are set up yet."));
+
+    lookupOn = data.lookup;
+    const folders = data.places.filter((p) => p.kind === "library");
+    show("folders", folders.length ? folders.map((f) => h("li", {},
+      h("div", { class: "grow" }, h("div", {}, f.label), h("span", {}, f.exists ? f.songs + (f.songs === 1 ? " song" : " songs") : "Not found on the server",
+        f.rule ? " · names read as " + f.rule : "")),
+      h("button", { class: "ghost small", type: "button", "aria-expanded": "false", onclick: (e) => namingForm(f, e.currentTarget) }, "Naming"),
+      h("button", { class: "ghost small", type: "button", onclick: act(async () => {
+        if (!confirm("Stop using " + f.path + "? Its songs leave the library, but the files stay on disk.")) return;
+        renderLibrary(await call("DELETE", "/library/folders?path=" + encodeURIComponent(f.path)));
+        flash("Folder removed", "ok");
+        loadSongs();
+      }) }, "Remove"))) : h("li", { class: "empty" }, "No folders yet, so the song library is off. Add one below."));
+    $("rescan").hidden = !data.library;
+    $("songs-section").hidden = !data.library;
+    $("dl-section").hidden = !data.downloads;
+    if (data.downloads) loadDownloads();
+    $("save-section").hidden = !data.saving;
+    $("save-folder").textContent = data.save_folder || "";
+    if (data.saving && !refreshSaves) {
+      refreshSaves = songSaver({
+        search: (q) => call("GET", "/youtube?q=" + encodeURIComponent(q)),
+        save: (body) => call("POST", "/saves", body),
+        list: async () => {
+          const jobs = await call("GET", "/saves");
+          if (jobs.some((j) => j.state === "saved" && !seenSaved.has(j.video_id))) loadSongs();  // new ones show in Songs
+          jobs.forEach((j) => j.state === "saved" && seenSaved.add(j.video_id));
+          return jobs;
+        },
+      });
+    }
+  }
+  let refreshSaves = null;
+  const seenSaved = new Set();
+
+  // How a folder's files are named, like "{artist} - {title}", tried out on its songs before saving.
+  const PATTERNS = ["{artist} - {title}", "{title} - {artist}", "{skip} - {artist} - {title}", "{artist}/{title}", "{artist}/{skip} - {title}"];
+  function namingForm(f, button) {
+    const li = button.closest("li");
+    const open = li.querySelector(".naming");
+    button.setAttribute("aria-expanded", String(!open));
+    if (open) { open.remove(); return; }
+    const input = h("input", { value: f.rule || PATTERNS[0], "aria-label": "How the files are named", spellcheck: "false", autocomplete: "off", maxlength: 200, required: true });
+    const result = h("div", { class: "naming-result", "aria-live": "polite" });
+    const preview = act(async () => {
+      const r = await call("POST", "/library/rules/preview", { folder: f.path, pattern: input.value });
+      show_(result, [
+        h("p", { class: "item-help" }, r.fits + " of " + r.songs + (r.songs === 1 ? " song fits." : " songs fit."),
+          r.misses.length ? " The rest keep the name guessed from the file, like " + r.misses.join(", ") + "." : ""),
+        r.examples.length ? h("ul", {}, r.examples.map((e) => h("li", {}, h("code", {}, e.file), " ",
+          h("strong", {}, e.title), e.artist ? h("span", { class: "muted" }, " · " + e.artist) : null,
+          e.edited ? h("span", { class: "muted" }, " (fixed by hand, keeps its fix)") : null))) : null]);
+    });
+    let timer;
+    input.oninput = () => { clearTimeout(timer); timer = setTimeout(preview, 300); };
+    const save = (pattern, done) => act(async () => {
+      renderLibrary(await call("PUT", "/library/rules", { folder: f.path, pattern }));
+      loadSongs();
+      flash(done, "ok");
+    })();
+    li.append(h("form", { class: "naming", onsubmit: (e) => { e.preventDefault(); save(input.value, "Names read the new way"); } },
+      h("p", { class: "item-help" }, "Write how this folder's files are named. ", h("code", {}, "{artist}"), " and ", h("code", {}, "{title}"),
+        " are read from the name, ", h("code", {}, "{skip}"), " leaves a part out, like a disc code or a track number, and ",
+        h("code", {}, "/"), " steps into the folder above, so ", h("code", {}, "{artist}/{title}"), " reads ABBA/Waterloo.mp3. Songs fixed by hand keep their fix."),
+      h("div", { class: "chips" }, PATTERNS.map((p) => h("button", { type: "button", class: "quiet small", onclick: () => { input.value = p; preview(); } }, p))),
+      h("div", { class: "row" }, input, h("button", { type: "submit", class: "small" }, "Save")),
+      f.rule ? h("button", { type: "button", class: "quiet small", onclick: () => save("", "Names guessed from the files again") }, "Go back to guessing") : null,
+      result));
+    preview();
+    input.focus();
+  }
+
+  const show_ = (el, items) => el.replaceChildren(...[items].flat().filter(Boolean));
+
+  $("add-folder").onsubmit = act(async (e) => {
+    e.preventDefault();
+    renderLibrary(await call("POST", "/library/folders", { value: $("new-folder").value.trim() }));
+    $("new-folder").value = "";
+    flash("Folder added", "ok");
+    loadSongs();
+  });
+
+  $("rescan").onclick = act(async () => {
+    await call("POST", "/library/rescan");
+    await loadLibrary();
+    loadSongs();
+    flash("Library rescanned", "ok");
+  });
+
+  const loadSongs = act(async (more) => {
+    const q = $("song-filter").value.trim();
+    const offset = more ? songsShown.list.length : 0;
+    if (!more) songsShown.picked.clear();
+    const data = await call("GET", "/library/songs?q=" + encodeURIComponent(q) + "&offset=" + offset);
+    if (q !== $("song-filter").value.trim()) return;  // a newer search is on its way
+    songsShown.list = more ? songsShown.list.concat(data.songs) : data.songs;
+    songsShown.total = data.total;
+    renderSongs();
+  });
+
+  function renderSongs() {
+    const { list, total } = songsShown;
+    $("song-count").textContent = total === 1 ? "1 song" : total + " songs";
+    show("songs", list.length ? list.map(songItem) : h("li", { class: "empty" }, $("song-filter").value.trim() ? "No songs match that." : "No songs found in the library folders."));
+    $("more-songs").hidden = list.length >= total;
+    renderBulk();
+  }
+
+  // Fix many songs at once: tick them, then set one artist, swap title and artist, or undo the fixes.
+  function renderBulk() {
+    const { picked, list } = songsShown;
+    const box = $("bulk");
+    box.hidden = !picked.size;
+    if (!picked.size) return box.replaceChildren();
+    const artist = h("input", { "aria-label": "Artist for the songs you picked", placeholder: "Artist", maxlength: 200, required: true });
+    const fix = (body, done) => act(async () => {
+      const res = await call("POST", "/library/songs/fix", { ids: [...picked], ...body });
+      for (const changed of res.songs) Object.assign(list.find((s) => s.id === changed.id) || {}, changed);
+      renderSongs();
+      flash(done(res.songs.length), "ok");
+    })();
+    const songs = (n) => n === 1 ? "1 song" : n + " songs";
+    show_(box, [
+      h("div", { class: "bulk-head" }, h("strong", {}, songs(picked.size) + " picked"),
+        h("button", { type: "button", class: "quiet small", onclick: () => { list.forEach((s) => picked.add(s.id)); renderSongs(); } }, "Pick all shown"),
+        h("button", { type: "button", class: "quiet small", onclick: () => { picked.clear(); renderSongs(); } }, "Clear")),
+      h("form", { class: "song-edit", onsubmit: (e) => { e.preventDefault(); fix({ action: "artist", artist: artist.value }, (n) => "Artist set on " + songs(n)); } },
+        artist, h("button", { type: "submit", class: "small" }, "Set artist")),
+      h("div", { class: "actions" },
+        h("button", { type: "button", class: "ghost small", onclick: () => fix({ action: "swap" }, (n) => "Swapped on " + songs(n)) }, "Swap title and artist"),
+        h("button", { type: "button", class: "quiet small", onclick: () => fix({ action: "undo" }, (n) => songs(n) + " back to their file names") }, "Undo fixes"))]);
+  }
+
+  function songItem(s) {
+    const li = h("li", {});
+    const pick = h("input", { type: "checkbox", class: "pick", "aria-label": "Pick " + s.title, checked: songsShown.picked.has(s.id),
+      onchange: (e) => { e.target.checked ? songsShown.picked.add(s.id) : songsShown.picked.delete(s.id); renderBulk(); } });
+    const view = () => show_(li, [
+      pick,
+      h("div", { class: "grow" },
+        h("div", {}, s.title, s.artist ? h("span", { class: "muted" }, " · " + s.artist) : null),
+        h("span", {}, [KIND[s.kind] || s.kind, size(s.bytes), s.folder, s.edited ? "name fixed here" : null].filter(Boolean).join(" · "))),
+      h("div", { class: "actions" },
+        h("button", { class: "ghost small", type: "button", onclick: edit }, "Edit"),
+        s.edited ? h("button", { class: "quiet small", type: "button", onclick: () => fix({ title: null }, "Back to the name from the file") }, "Undo edit") : null,
+        h("button", { class: "danger small", type: "button", onclick: act(async () => {
+          if (!confirm("Delete " + s.title + " from the server? This removes the file for good.")) return;
+          await call("DELETE", "/library/songs?id=" + encodeURIComponent(s.id));
+          songsShown.list = songsShown.list.filter((x) => x !== s);
+          songsShown.total--;
+          renderSongs();
+          flash("Deleted " + s.title, "ok");
+        }) }, "Delete"))]);
+    const fix = (body, done) => act(async () => {
+      Object.assign(s, await call("PATCH", "/library/songs", { id: s.id, artist: s.artist, ...body }));
+      view();
+      flash(done, "ok");
+    })();
+    function edit() {
+      const title = h("input", { value: s.title, "aria-label": "Title", required: true, maxlength: 200 });
+      const artist = h("input", { value: s.artist, "aria-label": "Artist", placeholder: "Artist", maxlength: 200 });
+      const found = h("ul", { class: "lookup", "aria-live": "polite" });
+      const lookUp = act(async () => {
+        const res = await call("GET", "/library/lookup?title=" + encodeURIComponent(title.value) + "&artist=" + encodeURIComponent(artist.value));
+        show_(found, res.matches.length ? res.matches.map((m) => h("li", {}, h("button", { type: "button", class: "quiet small", onclick: () => {
+          title.value = m.title;
+          artist.value = m.artist;
+          found.replaceChildren();
+        } }, m.title + " · " + m.artist + (m.year ? " (" + m.year + ")" : "")))) : h("li", { class: "muted small" }, "Nothing found. Try fewer words."));
+      });
+      show_(li, h("form", { class: "song-edit", onsubmit: (e) => { e.preventDefault(); fix({ title: title.value, artist: artist.value }, "Saved"); } },
+        title, artist,
+        h("div", { class: "actions" }, h("button", { class: "small", type: "submit" }, "Save"),
+          lookupOn ? h("button", { class: "ghost small", type: "button", onclick: lookUp }, "Look up") : null,
+          h("button", { class: "quiet small", type: "button", onclick: view }, "Cancel")),
+        found));
+      title.focus();
+    }
+    view();
+    return li;
+  }
+
+  let songTimer;
+  $("song-filter").oninput = () => { clearTimeout(songTimer); songTimer = setTimeout(() => loadSongs(), 250); };
+  $("more-songs").onclick = () => loadSongs(true);
+
+  const loadDownloads = act(async () => {
+    const files = await call("GET", "/downloads");
+    $("clear-downloads").disabled = !files.length;
+    show("downloads", files.length ? files.map((f) => h("li", {},
+      h("div", { class: "grow" },
+        h("div", {}, f.title || f.video_id, f.artist ? h("span", { class: "muted" }, " · " + f.artist) : null),
+        h("span", {}, [size(f.bytes), f.played_at ? "played " + ago(f.played_at) : null].filter(Boolean).join(" · "))),
+      h("button", { class: "danger small", type: "button", onclick: act(async () => {
+        await call("DELETE", "/downloads/" + encodeURIComponent(f.video_id));
+        flash("Deleted " + (f.title || f.video_id), "ok");
+        loadLibrary();
+      }) }, "Delete"))) : h("li", { class: "empty" }, "Nothing downloaded right now."));
+  });
+
+  $("clear-downloads").onclick = act(async () => {
+    if (!confirm("Delete every downloaded song? They download again the next time someone queues them.")) return;
+    await call("DELETE", "/downloads");
+    flash("Downloads cleared", "ok");
+    loadLibrary();
+  });
+
+  function filterSettings() {
+    const query = $("settings-filter").value.trim().toLowerCase();
+    let count = 0;
+    document.querySelectorAll("#groups section").forEach(section => {
+      let visible = false;
+      section.querySelectorAll(".item").forEach(item => {
+        const match = !query || item.textContent.toLowerCase().includes(query) || section.querySelector("h2").textContent.toLowerCase().includes(query);
+        item.hidden = !match;
+        visible ||= match;
+      });
+      section.hidden = !visible;
+      if (visible) count++;
+    });
+    $("no-settings").hidden = count > 0;
+  }
+  $("settings-filter").oninput = filterSettings;
+  document.querySelectorAll("button[data-admin-view]").forEach(button => button.onclick = () => {
+    document.body.dataset.adminView = button.dataset.adminView;
+    document.querySelectorAll("button[data-admin-view]").forEach(other => {
+      if (other === button) other.setAttribute("aria-current", "page"); else other.removeAttribute("aria-current");
+    });
+    if (button.dataset.adminView === "library") { loadLibrary(); loadSongs(); }
+  });
+  act(async () => (keys.get("admin") ? load() : gate()))();
+</script>
+</body>
+</html>

@@ -1,0 +1,1083 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Host | KaraQueue</title>
+  <link rel="icon" href="/static/KaraQueue-Icon.png">
+  <script src="/static/theme.js"></script>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/host.css">
+</head>
+<body class="host-page" data-view="overview">
+<a class="skip-link" href="#workspace">Skip to host controls</a>
+<aside class="sidebar"><a href="/" class="wordmark"><span class="brand-symbol" aria-hidden="true"><i></i><i></i><i></i></span>KaraQueue</a><div class="sidebar-label">Your host booth</div><nav class="host-nav" aria-label="Host workspace"><button type="button" aria-label="The queue" data-mobile-label="Queue" data-host-view="overview" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg><span>The queue</span></button><button type="button" aria-label="Screens & sound" data-mobile-label="Screens" data-host-view="screens" ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h18v13H3zM8 21h8M12 17v4"/></svg><span>Screens & sound</span></button><button type="button" aria-label="Add a song" data-mobile-label="Add song" data-host-view="songs" ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v16M4 12h16"/></svg><span>Add a song</span></button><button type="button" aria-label="Room settings" data-mobile-label="Settings" data-host-view="settings" ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M4 17h16M8 4v6M16 14v6"/></svg><span>Room settings</span></button><button type="button" aria-label="Recordings" data-mobile-label="Recordings" data-host-view="recordings" ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4a8 8 0 1 0 0 16 8 8 0 1 0 0-16M12 9a3 3 0 1 0 0 6 3 3 0 1 0 0-6"/></svg><span>Recordings</span></button></nav><div class="sidebar-bottom"><p>Good nights.<br>Fair turns.</p><label class="theme-picker"><span class="sr">Color theme</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg><select data-theme-picker aria-label="Color theme"><option value="sunset">Sunset</option><option value="midnight">Midnight</option><option value="daylight">Daylight</option></select></label><a class="sidebar-home" href="/">Back to home</a></div></aside>
+<main class="host" id="workspace">
+  <header class="masthead">
+    <span class="connection" data-connection role="status">Connecting</span>
+    <h1 id="room-name">Host</h1>
+    <div class="room"><span class="muted small">Room</span> <span class="code" id="room-code"></span></div>
+    <button class="ghost small" id="copy-host" type="button" aria-describedby="host-link-note"
+      title="This link signs whoever opens it in as host. Only share it with co-hosts.">Invite co-host</button>
+    <span class="visually-hidden" id="host-link-note">This link signs whoever opens it in as host. Only share it with co-hosts.</span>
+  </header>
+
+  <div class="workspace-title"><div><h2 id="view-title" tabindex="-1">The queue</h2><p id="view-description">A great night, one singer at a time.</p></div><a class="button ghost small" id="guest-view" target="_blank" rel="noopener">Guest view</a></div>
+  <div class="room-stats view-overview"><span><strong id="stat-singers">0</strong> singers</span><span><strong id="stat-songs">0</strong> songs queued</span><span id="requests-status">Requests open</span></div>
+  <div class="board">
+    <div class="col">
+      <section class="show card view-overview" id="show" aria-labelledby="now-heading">
+        <h2 class="visually-hidden" id="now-heading">The show</h2>
+        <div id="now" aria-live="polite"></div>
+        <p class="up-next" id="up-next"></p>
+        <div class="show-actions">
+          <button id="next" class="next">Next song</button>
+          <button class="ghost" id="pause"></button>
+        </div>
+        <p class="paused-note" id="paused-note" hidden>Requests are paused. Singers can't add songs until you resume.</p>
+      </section>
+
+      <section class="screens view-screens" aria-labelledby="screens-heading">
+        <div class="section-head">
+          <h2 id="screens-heading">Screens</h2>
+          <div class="row screen-launch">
+            <button class="ghost small" id="open-window" type="button">Launch a screen</button>
+            <button class="ghost small" id="open-monitor" type="button" hidden>Open on the other monitor</button>
+            <button class="ghost small" id="cast" type="button" hidden>Cast a screen</button>
+          </div>
+        </div>
+        <div class="sound-from card">
+          <div class="setting" role="group" aria-labelledby="sound-from-label">
+            <span class="setting-label" id="sound-from-label">Sound from</span>
+            <div class="setting-body">
+              <div class="setting-line">
+                <div class="segmented grow" id="sound-choices" role="group" aria-label="Sound from"></div>
+                <button class="small" id="sound-start" type="button" hidden>Start sound here</button>
+              </div>
+              <p class="setting-note" id="sound-note"></p>
+            </div>
+          </div>
+        </div>
+        <div id="waiting" class="waiting card" aria-live="polite" hidden>
+          <h3>Screens asking to join</h3>
+          <p class="muted small">Let in the one showing the same code as your TV. Screens you open from this device join by themselves.</p>
+          <ul id="waiting-list" class="waiting-list"></ul>
+        </div>
+        <div id="screens" class="tv-list"></div>
+        <div id="screens-empty" class="screens-empty card" hidden>
+          <div class="tv tv-ghost" aria-hidden="true"><div class="tv-screen"></div></div>
+          <div class="empty-copy">
+            <h3>Put the show on a TV</h3>
+            <p class="muted">Open this link on the TV, or on any computer plugged into it. It shows a code and asks to join here; let it in and you control it from this page.</p>
+            <div class="link-box"><span class="screen-url" id="screen-url-empty"></span></div>
+            <div class="row">
+              <button class="ghost small copy-screen" type="button">Copy link</button>
+              <a class="button ghost small screen-here" target="_blank" rel="noopener">Open here</a>
+            </div>
+          </div>
+        </div>
+        <p class="muted small add-another" id="add-another" hidden>
+          Add another screen by opening <span class="screen-url"></span> on it.
+          <button class="quiet small copy-screen" type="button">Copy link</button>
+        </p>
+      </section>
+    </div>
+
+    <div class="col">
+      <section class="invite-card card view-overview" aria-labelledby="invite-heading"><h2 id="invite-heading">Bring everyone in</h2><p class="muted small">Scan, pick a name, find a song.</p><div id="invite-qr" role="img" aria-label="QR code to join the room"></div><p class="paused-note small" id="local-warning" hidden>This page is open at localhost, so guests' phones can't use this code. Open KaraQueue at this computer's network address, or set the Public address on the admin page.</p><div class="invite-code code" id="invite-code"></div><p class="muted small">Your room code</p><button type="button" class="ghost" id="copy-guest">Copy guest link</button></section>
+      <section class="card view-songs" id="songs-empty"><h2>Who's singing?</h2><p class="muted">Once a guest joins, you can add songs for them here.</p><button class="ghost" type="button" data-host-view="overview">Invite your first singer</button></section>
+      <section class="card view-recordings" id="recordings-empty"><h2>No takes yet</h2><p class="muted" id="recordings-help">Recordings need to be enabled in server settings. When they are, turn on recording for a connected screen.</p></section>
+      <section class="queue-section view-overview" aria-labelledby="singers-heading">
+        <div class="section-head">
+          <h2 id="singers-heading">Singer rotation</h2>
+          <span class="muted small" id="singer-count"></span>
+        </div>
+        <div id="singers" class="card list-card"></div>
+        <form id="add-singer" class="row add-singer"><input id="new-singer" class="grow" placeholder="Add someone by name" aria-label="Name of the singer to add" autocomplete="off" autocapitalize="words" required><button class="ghost">Add singer</button></form>
+      </section>
+
+      <section class="view-settings" aria-labelledby="rules-heading">
+        <div class="section-head"><h2 id="rules-heading">Room rules</h2></div>
+        <div class="card rules">
+          <div class="setting" role="group" aria-labelledby="rule-limit">
+            <span class="setting-label" id="rule-limit">Songs per guest</span>
+            <div class="setting-body">
+              <div class="setting-line">
+                <input id="limit" class="limit" type="number" min="1" max="1000" inputmode="numeric" aria-labelledby="rule-limit">
+                <button class="quiet small" id="limit-reset" type="button">Use the server's</button>
+              </div>
+              <p class="setting-note" id="limit-note"></p>
+            </div>
+          </div>
+          <div class="setting" role="group" aria-labelledby="rule-youtube">
+            <span class="setting-label" id="rule-youtube">YouTube songs</span>
+            <div class="setting-body"><div class="setting-line"><div class="segmented" id="youtube-rule"></div></div></div>
+          </div>
+          <div class="setting" role="group" aria-labelledby="rule-library" id="library-rule" hidden>
+            <span class="setting-label" id="rule-library">Song library</span>
+            <div class="setting-body"><div class="setting-line"><div class="segmented" id="library-rule-choice"></div></div></div>
+          </div>
+          <p class="setting-note">Guests only. You can always add any song yourself.</p>
+        </div>
+      </section>
+
+      <section class="view-songs" aria-labelledby="add-heading" id="add-section">
+        <div class="section-head"><h2 id="add-heading">Add a song for someone</h2></div>
+        <form id="add" class="card">
+          <label class="field"><span class="muted small">Singer</span><select id="for"></select></label>
+          <div class="field" id="find" hidden>
+            <label class="muted small" for="find-q" id="find-label">Find a song</label>
+            <div class="row"><input id="find-q" type="search" class="grow" maxlength="100" enterkeyhint="search" autocomplete="off"><button type="button" class="ghost" id="find-go">Search</button></div>
+            <ul id="find-results"></ul>
+          </div>
+          <div class="pair">
+            <label class="field"><span class="muted small">Song</span><input id="title" maxlength="120" required autocomplete="off"></label>
+            <label class="field"><span class="muted small">Artist</span><input id="artist" maxlength="120" placeholder="Optional" autocomplete="off"></label>
+          </div>
+          <label class="field"><span class="muted small">YouTube link (optional)</span><input id="video" inputmode="url" autocomplete="off"></label>
+          <button type="submit">Add song</button>
+        </form>
+      </section>
+
+      <section class="view-songs" aria-labelledby="save-heading" id="save-section" hidden>
+        <div class="section-head"><h2 id="save-heading">Save songs to the library</h2></div>
+        <div class="card list-card">
+          <p class="muted small">Find a song on YouTube or paste a link. Saved songs stay on the server, so guests find them in the song library from then on.</p>
+          <form id="yt-search">
+            <input id="yt-q" type="search" placeholder="Song, artist or a YouTube link" maxlength="300" autocomplete="off" aria-label="Search YouTube or paste a link">
+            <button>Search</button>
+          </form>
+          <ol id="yt-results" class="recordings"></ol>
+          <ol id="saves" class="recordings"></ol>
+        </div>
+      </section>
+
+      <section class="view-recordings" aria-labelledby="rec-heading" id="rec-section" hidden>
+        <div class="section-head">
+          <h2 id="rec-heading">Recordings</h2>
+          <span class="muted small" id="rec-count"></span>
+        </div>
+        <div class="card list-card"><ol id="recordings" class="recordings"></ol></div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<div class="menu" id="singer-menu" popover></div>
+<dialog id="move-dialog" class="move-dialog" aria-labelledby="move-heading"><h2 id="move-heading"></h2><div id="move-body"></div><form method="dialog"><button class="ghost">Done</button></form></dialog>
+<div class="dock" id="dock" hidden>
+  <div class="grow dock-now" id="dock-now"></div>
+  <button class="next" id="dock-next" type="button">Next song</button>
+</div>
+<div id="flash" role="status" aria-live="polite" hidden></div>
+
+<script src="/static/kq.js"></script>
+<script>
+  // A host link carries the key in the #fragment, which never reaches the server or its logs.
+  const fromLink = new URLSearchParams(location.hash.slice(1)).get("key");
+  if (fromLink) {
+    keys.set(code, { role: "host", token: fromLink });
+    history.replaceState(null, "", location.pathname);
+  }
+  const base = "/rooms/" + code;
+  const $ = (id) => document.getElementById(id);
+  let state = null;
+  let lastSongId;
+  let recordingsOn = false; // from /api/config: only then is anything about recording shown
+
+  // ---- Icons: fixed markup, built as SVG nodes. ----
+  const ICONS = {
+    play: "M8 5.5v13l11-6.5z",
+    pause: "M7 5h3.5v14H7zM13.5 5H17v14h-3.5z",
+    restart: "M5 12a7 7 0 1 0 7-7 7.6 7.6 0 0 0-5.24 2.13L5 8.9M5 5v3.9h3.9",
+    up: "M6 15l6-6 6 6",
+    down: "M6 9l6 6 6-6",
+    speaker: "M4 9.5h3.5L12 6v12l-4.5-3.5H4zM15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11",
+    muted: "M4 9.5h3.5L12 6v12l-4.5-3.5H4zM16 9.5l5 5M21 9.5l-5 5",
+    mic: "M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21",
+    "mic-off": "M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M4 4l16 16",
+    rec: "M12 6.5a5.5 5.5 0 1 0 0 11a5.5 5.5 0 1 0 0-11z",
+    "rec-off": "M12 6.5a5.5 5.5 0 1 0 0 11a5.5 5.5 0 1 0 0-11z",
+    more: "M5 10.25a1.75 1.75 0 1 0 0 3.5a1.75 1.75 0 1 0 0-3.5zM12 10.25a1.75 1.75 0 1 0 0 3.5a1.75 1.75 0 1 0 0-3.5zM19 10.25a1.75 1.75 0 1 0 0 3.5a1.75 1.75 0 1 0 0-3.5z",
+    close: "M7 7l10 10M17 7L7 17",
+    note: "M9 18V5l11-2v13M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM20 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z",
+  };
+  const FILLED = new Set(["play", "pause", "rec", "more"]);
+  function icon(name) {
+    const ns = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(ns, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("class", "ico ico-" + name);
+    const path = document.createElementNS(ns, "path");
+    path.setAttribute("d", ICONS[name]);
+    if (FILLED.has(name)) path.setAttribute("fill", "currentColor");
+    else { path.setAttribute("fill", "none"); path.setAttribute("stroke", "currentColor"); path.setAttribute("stroke-width", "2"); path.setAttribute("stroke-linecap", "round"); path.setAttribute("stroke-linejoin", "round"); }
+    svg.append(path);
+    return svg;
+  }
+
+  // ---- The show and the singers ----
+  const refresh = act(async () => {
+    try {
+      state = await api("GET", base + "/host");
+    } catch (e) {
+      if (e.status === 401 || e.status === 403 || e.status === 404) { location.href = "/r/" + code; return; }
+      throw e;
+    }
+    document.title = "Host: " + state.name + " | KaraQueue";
+    $("room-name").textContent = state.name;
+    $("room-code").textContent = state.code;
+    $("invite-code").textContent = state.code;
+    $("stat-singers").textContent = state.singers.length;
+    $("stat-songs").textContent = state.singers.reduce((sum, singer) => sum + singer.songs.length, 0);
+    $("requests-status").textContent = state.paused ? "Requests paused" : "Requests open";
+    $("requests-status").classList.toggle("is-paused", state.paused);
+    renderShow();
+    renderSingers();
+    renderRules();
+    renderSound();
+  });
+
+  // ---- Where the sound comes from: each screen on its own, one screen, or this page. Picking
+  // this page loads a hidden screen into it that plays the music and runs the mic and recording
+  // on this computer, while the TVs show the picture in step, muted. Only one at a time. ----
+  const panelKey = "kq:panel:" + code;
+  let panelId = localStorage.getItem(panelKey);
+  if (!/^[0-9a-f]{24}$/.test(panelId || "")) {
+    panelId = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, "0")).join("");
+    localStorage.setItem(panelKey, panelId);
+  }
+  let shownDisplays = [];
+  const soundFrom = () => (state && state.options.sound) || "";
+
+  // Browsers only play sound after a click on the page, so this always starts from one.
+  function startPanelSound() {
+    if ($("panel-sound")) return;
+    document.body.append(h("iframe", { id: "panel-sound", class: "panel-sound", title: "Sound for this room",
+      allow: "autoplay; microphone; speaker-selection", tabindex: "-1", "aria-hidden": "true",
+      src: "/r/" + code + "/screen?panel=" + panelId }));
+  }
+  function stopPanelSound() {
+    const frame = $("panel-sound");
+    if (frame) frame.remove();
+  }
+
+  const pickSound = act(async (value) => {
+    if (value === panelId) startPanelSound();
+    await api("PUT", base + "/options", { sound: value });
+    if (value !== panelId) stopPanelSound();
+  });
+
+  function renderSound() {
+    if (!state) return;
+    const from = soundFrom(), here = from === panelId, playing = !!$("panel-sound");
+    const choices = [["", "Each screen"], ...shownDisplays.filter((d) => !d.panel).map((d) => [d.id, d.name]), [panelId, "This page"]];
+    // A screen that's gone keeps its spot while it's still the pick, so the choice doesn't vanish.
+    if (from && !choices.some(([value]) => value === from)) choices.splice(-1, 0, [from, "A screen that left"]);
+    show("sound-choices", choices.map(([value, label]) => h("button", { type: "button",
+      "aria-pressed": String(value === from), onclick: () => pickSound(value) }, label)));
+    $("sound-start").hidden = !here || playing;
+    setNote($("sound-note"), here && !playing ? "The sound is set to play from this page. Start it again after a reload."
+      : here ? "Music, mic and recording run on this computer. The screens show the picture in step, muted."
+      : from ? "Music, mic and recording run on that screen. The others show the picture in step, muted."
+      : "Every screen plays its own sound.");
+    for (const t of tiles.values()) t.paint();
+  }
+  $("sound-start").onclick = startPanelSound;
+
+  function renderRules() {
+    const o = state.options;
+    if (document.activeElement !== $("limit")) $("limit").value = o.limit;
+    $("limit-reset").hidden = o.songs_per_singer == null;
+    $("limit-note").textContent = o.songs_per_singer == null ? "The server's limit." : "Just for this room.";
+    const choice = (id, key) => show(id, [["On", true], ["Off", false]].map(([label, value]) =>
+      h("button", { type: "button", "aria-pressed": String(o[key] === value),
+        onclick: act(() => api("PUT", base + "/options", { [key]: value })) }, label)));
+    choice("youtube-rule", "youtube");
+    choice("library-rule-choice", "library");
+  }
+
+  function renderShow() {
+    const np = state.now_playing;
+    if (np) {
+      // A new song plays the karaoke wipe across the singer's name; after that it stays lit.
+      const fresh = lastSongId !== undefined && lastSongId !== np.id;
+      const name = wipeText("div", "now-singer" + (fresh ? "" : " sung"), np.singer);
+      show("now", h("div", { class: "now-label muted" }, "Now singing"), name,
+        h("div", { class: "now-song" }, np.title, h("span", { class: "by" }, np.artist ? " by " + np.artist : "")));
+      if (fresh) requestAnimationFrame(() => requestAnimationFrame(() => name.classList.add("sung")));
+    } else {
+      show("now", h("div", { class: "now-singer idle" }, state.up_next ? "Ready when you are" : "The stage is yours"));
+    }
+    lastSongId = np ? np.id : null;
+
+    const upNext = state.up_next ? state.up_next.singer : null;
+    $("up-next").textContent = upNext
+      ? (np ? "Up next: " + upNext : upNext + " is up first. Press Next song to start.")
+      : (np ? "Nobody else is queued." : state.singers.length ? "No songs queued yet." : "Waiting for singers to join.");
+    const nothing = !np && !upNext;
+    $("next").disabled = $("dock-next").disabled = nothing;
+    $("pause").textContent = state.paused ? "Resume requests" : "Pause requests";
+    $("pause").setAttribute("aria-pressed", String(state.paused));
+    $("paused-note").hidden = !state.paused;
+    $("dock-now").replaceChildren(np ? h("span", {}, h("strong", {}, np.singer), " is singing") : h("span", { class: "muted" }, upNext ? upNext + " is up first" : "Nothing playing"));
+  }
+
+  function renderSingers() {
+    const ids = state.singers.map((s) => s.id);
+    const singing = state.now_playing && state.now_playing.singer;
+    const next = state.up_next && state.up_next.singer;
+    $("singer-count").textContent = state.singers.length ? state.singers.length + " in the rotation" : "";
+    show("singers", state.singers.length ? h("ol", { class: "singers" }, state.singers.map((s, i) => h("li", { class: "singer" + (s.hidden ? " is-skipped" : "") },
+      h("div", { class: "singer-head" },
+        h("span", { class: "pos", "aria-hidden": "true" }, String(i + 1)),
+        h("div", { class: "grow singer-name" },
+          h("span", { class: "name" }, s.name),
+          s.hidden ? h("span", { class: "tag skipped" }, "Skipped") : null,
+          s.name === singing ? h("span", { class: "tag singing" }, "Singing") : s.name === next ? h("span", { class: "tag next-up" }, "Up next") : null),
+        h("div", { class: "tools" },
+          iconButton("up", "Move " + s.name + " earlier", i === 0, () => api("PUT", base + "/rotation", { order: swap(ids, i, -1) })),
+          iconButton("down", "Move " + s.name + " later", i === ids.length - 1, () => api("PUT", base + "/rotation", { order: swap(ids, i, 1) })),
+          moreButton(s))),
+      s.songs.length ? h("ol", { class: "songs", "aria-label": s.name + "'s songs" }, s.songs.map((song, j) => h("li", {},
+        h("span", { class: "grow" }, song.title, h("span", { class: "by" }, song.artist ? " by " + song.artist : "")),
+        h("div", { class: "tools" },
+          iconButton("up", "Move " + song.title + " up", j === 0, () => reorderSongs(s, j, -1)),
+          iconButton("down", "Move " + song.title + " down", j === s.songs.length - 1, () => reorderSongs(s, j, 1)),
+          iconButton("close", "Remove " + song.title, false, () => api("DELETE", base + "/songs/" + song.id), "remove")))))
+        : h("p", { class: "muted small no-songs" }, "No songs queued"))))
+      : h("p", { class: "muted empty" }, "Nobody's joined yet. Put a screen up so people can scan in."));
+
+    const select = $("for"), chosen = select.value;
+    select.replaceChildren(...state.singers.map((s) => h("option", { value: s.id, selected: String(s.id) === chosen }, s.name)));
+    $("add-section").hidden = !state.singers.length;
+    $("songs-empty").hidden = !!state.singers.length;
+  }
+
+  function iconButton(name, label, disabled, fn, extra) {
+    return h("button", { class: "quiet icon" + (extra ? " " + extra : ""), type: "button", "aria-label": label, title: label, disabled, onclick: act(fn) }, icon(name));
+  }
+
+  // Skip and Remove live in one small menu per singer, so the list isn't a wall of buttons.
+  // One shared popover: the button fills it, the browser opens it, closes it on a click outside or Escape.
+  const menu = $("singer-menu");
+  let menuFrom = null;
+  function moreButton(s) {
+    const label = "More for " + s.name;
+    return h("button", { class: "quiet icon more", type: "button", "aria-label": label, title: label, popovertarget: "singer-menu",
+      onclick: (e) => {
+        menuFrom = e.currentTarget;
+        menu.replaceChildren(
+          h("button", { type: "button", onclick: act(() => { menu.hidePopover(); return signInPhone(s); }) },
+            "Sign in " + s.name + "'s phone"),
+          h("button", { type: "button", onclick: act(() => { menu.hidePopover(); return api("PUT", base + "/singers/" + s.id + "/hidden", { value: !s.hidden }); }) },
+            s.hidden ? "Put " + s.name + " back in" : "Skip " + s.name + " for now"),
+          h("button", { type: "button", class: "danger-text", onclick: act(() => { menu.hidePopover(); return confirm("Remove " + s.name + ", their songs and any recordings of them?") && api("DELETE", base + "/singers/" + s.id); }) },
+            "Remove " + s.name));
+      } }, icon("more"));
+  }
+  // A one-time code that puts a singer back on a new or restarted phone, or on one for
+  // someone the host added by hand.
+  async function signInPhone(s) {
+    const res = await api("POST", base + "/singers/" + s.id + "/link");
+    const qr = h("div", { class: "move-qr", role: "img", "aria-label": "QR code that signs a phone in as " + s.name });
+    qr.innerHTML = res.qr_svg; // Server-generated QR markup.
+    $("move-heading").textContent = "Sign in " + s.name + "'s phone";
+    show("move-body", h("p", { class: "muted small" }, "Have " + s.name + " scan this. It works once, for " + res.minutes + " minutes, and puts them back on their spot with their songs."), qr,
+      h("button", { type: "button", class: "ghost small", onclick: act(async () => { await navigator.clipboard.writeText(res.link); flash("Copied. Send it to " + s.name + " only.", "ok"); }) }, "Copy link"));
+    $("move-dialog").showModal();
+  }
+
+  $("add-singer").onsubmit = act(async (e) => {
+    e.preventDefault();
+    const res = await api("POST", base + "/singers", { name: $("new-singer").value });
+    $("new-singer").value = "";
+    flash("Added " + res.name + ". Add songs for them, or sign their phone in from their menu.", "ok");
+  });
+
+  menu.addEventListener("toggle", (e) => {
+    if (e.newState !== "open" || !menuFrom) return;
+    const r = menuFrom.getBoundingClientRect();
+    const w = menu.offsetWidth, tall = menu.offsetHeight;
+    menu.style.left = Math.max(8, Math.min(r.right - w, innerWidth - w - 8)) + "px";
+    menu.style.top = (r.bottom + 6 + tall > innerHeight ? r.top - tall - 6 : r.bottom + 6) + "px";
+  });
+  addEventListener("scroll", () => { if (menu.matches(":popover-open")) menu.hidePopover(); }, { passive: true });
+
+  function swap(list, i, by) {
+    const copy = list.slice();
+    [copy[i], copy[i + by]] = [copy[i + by], copy[i]];
+    return copy;
+  }
+
+  const reorderSongs = (s, j, by) => api("PUT", base + "/singers/" + s.id + "/songs", { order: swap(s.songs.map((x) => x.id), j, by) });
+
+  // ---- Recordings: every take in the room, newest first. ----
+  const refreshRecordings = act(async () => {
+    if (!recordingsOn) { $("rec-section").hidden = true; return; }
+    renderRecordings(await api("GET", base + "/recordings"));
+  });
+
+  // created_at is unix seconds from the server; an ISO string works too.
+  function when(value) {
+    const d = typeof value === "number" || /^\d+(\.\d+)?$/.test(String(value)) ? new Date(Number(value) * 1000) : new Date(value);
+    return isNaN(d) ? "" : d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  }
+  const megs = (bytes) => bytes < 1e6 ? Math.max(1, Math.round(bytes / 1e3)) + " KB" : (bytes / 1e6).toFixed(1) + " MB";
+
+  function renderRecordings(list) {
+    $("rec-section").hidden = !list.length;
+    $("recordings-empty").hidden = !!list.length;
+    $("rec-count").textContent = list.length === 1 ? "1 take" : list.length + " takes";
+    show("recordings", list.map((r) => h("li", {},
+      h("div", { class: "grow rec-info" },
+        h("div", {}, r.title, h("span", { class: "by" }, r.artist ? " by " + r.artist : "")),
+        h("div", { class: "muted small" }, r.singer + (when(r.created_at) ? " at " + when(r.created_at) : "") + ", " + megs(r.size))),
+      h("div", { class: "tools" },
+        h("button", { class: "ghost small", type: "button", "aria-label": "Download " + r.singer + " singing " + r.title, onclick: act(() => download(r)) }, "Download"),
+        iconButton("close", "Delete " + r.singer + " singing " + r.title, false,
+          () => confirm("Delete " + r.singer + "'s take of " + r.title + "? It's gone for good.") && api("DELETE", base + "/recordings/" + r.id), "remove")))));
+  }
+
+  // The file needs the host's key, so fetch it, then hand the browser a local copy to save.
+  async function download(r) {
+    const saved = keys.get(code);
+    const res = await fetch("/api" + base + "/recordings/" + r.id + "/file", { headers: saved ? { Authorization: "Bearer " + saved.token } : {} });
+    if (!res.ok) throw new Error(res.status === 404 ? "That recording isn't there anymore" : "Couldn't download that recording");
+    const ext = (/\.([A-Za-z0-9]+)"?\s*$/.exec(res.headers.get("Content-Disposition") || "") || [, "webm"])[1];
+    const url = URL.createObjectURL(await res.blob());
+    const a = h("a", { href: url, download: (r.singer + " - " + r.title).replace(/[\\/:*?"<>|]+/g, " ") + "." + ext, hidden: true });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  }
+
+  // ---- Screens ----
+  const LAYOUTS = [
+    ["split", "Split"], ["video", "Video"], ["queue", "Queue"], ["splash", "Join screen"], ["confidence", "Singer monitor"],
+  ];
+  const REVERBS = [[0, "Dry"], [25, "Room"], [55, "Hall"], [85, "Stadium"]];
+  const STATE_TEXT = { idle: "Idle", playing: "Playing", paused: "Paused", buffering: "Loading", ended: "Finished" };
+  const tiles = new Map(); // display id -> tile
+  let guestUrl = location.origin + "/r/" + code;
+  let screenUrl = location.origin + "/r/" + code + "/screen";
+  let firstScreens = true;
+
+  // Each layout is drawn as a handful of spans; host.css turns them into a tiny picture of that screen.
+  function pict(layout) {
+    const parts = {
+      split: ["video", "side", "line a", "line b", "line c"],
+      video: ["video full", "play"],
+      queue: ["line big", "line a", "line b", "line c", "line d"],
+      splash: ["qr", "line big", "line a"],
+      confidence: ["line big sing", "line a", "line b"],
+    }[layout] || [];
+    return h("span", { class: "pict pict-" + layout, "aria-hidden": "true" }, parts.map((p) => h("span", { class: p })));
+  }
+
+  const clock = (s) => Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0");
+
+  // Coalesces bursts of "displays" messages (a playing screen reports its time often) into one fetch at a time.
+  let fetching = false, again = false;
+  async function refreshDisplays() {
+    if (fetching) { again = true; return; }
+    fetching = true;
+    try {
+      do {
+        again = false;
+        renderScreens(await api("GET", base + "/displays"));
+      } while (again);
+    } catch (e) {
+      if (e.status !== 401 && e.status !== 403) flash(e.message);
+    } finally {
+      fetching = false;
+    }
+  }
+
+  let seenWaiting = new Set();
+  async function refreshWaiting() {
+    let list;
+    try { list = await api("GET", base + "/waiting"); } catch (e) { return; }
+    $("waiting").hidden = !list.length;
+    // A dot on Screens & sound, and a heads-up when a new screen asks while the host is elsewhere.
+    const nav = document.querySelector('[data-host-view="screens"]');
+    nav.classList.toggle("has-waiting", list.length > 0);
+    nav.setAttribute("aria-label", list.length ? "Screens & sound, " + list.length + " asking to join" : "Screens & sound");
+    const fresh = list.find((w) => !seenWaiting.has(w.id));
+    seenWaiting = new Set(list.map((w) => w.id));
+    if (fresh && document.body.dataset.view !== "screens") flash(fresh.name + " is asking to join. Let it in from Screens & sound.", "ok");
+    show("waiting-list", list.map((w) => h("li", {},
+      h("span", { class: "waiting-name" }, w.name),
+      h("span", { class: "waiting-code", "aria-label": "Code " + w.code.split("").join(" ") }, w.code),
+      h("button", { class: "small", type: "button", onclick: act(() => api("POST", base + "/waiting/" + w.id, { value: true })) },
+        "Let in"),
+      h("button", { class: "quiet small", type: "button", onclick: act(() => api("POST", base + "/waiting/" + w.id, { value: false })) },
+        "Turn away"))));
+  }
+
+  function renderScreens(list) {
+    const seen = new Set();
+    const container = $("screens");
+    list.forEach((d, i) => {
+      seen.add(d.id);
+      let tile = tiles.get(d.id);
+      if (!tile) {
+        tile = makeTile(d);
+        tiles.set(d.id, tile);
+        if (!firstScreens) tile.el.classList.add("arrive");
+      }
+      if (container.children[i] !== tile.el) container.insertBefore(tile.el, container.children[i] || null);
+      tile.update(d);
+    });
+    for (const [id, tile] of tiles) if (!seen.has(id)) { tile.el.remove(); tiles.delete(id); }
+    firstScreens = false;
+    const screens = list.filter((d) => !d.panel).length;
+    $("screens-empty").hidden = screens > 0;
+    $("add-another").hidden = screens === 0;
+    shownDisplays = list;
+    renderSound();
+  }
+
+  function patch(id, body) {
+    return api("PATCH", base + "/displays/" + encodeURIComponent(id), body).catch((e) => {
+      flash(e.message);
+      refreshDisplays();
+    });
+  }
+
+  // Every setting on a screen card is one of these: a muted label, then the control line, then at
+  // most one note under it. Same grid, same heights, so the whole card lines up.
+  function setting(tileId, key, label, line, note) {
+    const labelId = "s-" + tileId + "-" + key;
+    return h("div", { class: "setting setting-" + key, role: "group", "aria-labelledby": labelId },
+      h("span", { class: "setting-label", id: labelId }, label),
+      h("div", { class: "setting-body" }, h("div", { class: "setting-line" }, line), note || null));
+  }
+  const noteEl = () => h("p", { class: "setting-note", hidden: true });
+  function setNote(el, text) { el.textContent = text; el.hidden = !text; }
+
+  function makeTile(d) {
+    const id = d.id;
+    const t = { d, at: performance.now(), volumeHeld: 0, editing: false };
+
+    // The little TV: just the picture of what's on it and how far into the song it is.
+    const screen = h("div", { class: "tv-screen" });
+    const bar = h("span", {});
+    const progress = h("div", { class: "tv-progress", "aria-hidden": "true" }, bar);
+    let picture = pict(d.layout);
+    screen.append(picture, progress);
+    const tv = h("div", { class: "tv", "aria-hidden": "true" }, screen, h("span", { class: "tv-led" }));
+
+    const nameEl = h("h3", { class: "tv-name" });
+    const stateChip = h("span", { class: "tv-state" });
+    const recMark = h("span", { class: "rec-mark", hidden: true }, "Recording");
+
+    const playBtn = h("button", { class: "ghost icon", type: "button" });
+    // With one sound source, play, pause and restart go to it; the other screens follow along.
+    const transportTo = () => tiles.has(soundFrom()) ? soundFrom() : id;
+    const restartBtn = h("button", { class: "ghost icon", type: "button", "aria-label": "Restart the song", title: "Restart the song",
+      onclick: () => patch(transportTo(), { action: "restart" }) }, icon("restart"));
+    const time = h("span", { class: "tv-time grow" });
+    playBtn.onclick = () => {
+      const playing = t.d.state === "playing" || t.d.state === "buffering";
+      t.d = { ...t.d, state: playing ? "paused" : "playing" };
+      t.at = performance.now();
+      paint();
+      patch(transportTo(), { action: playing ? "pause" : "play" });
+    };
+
+    const muteBtn = h("button", { class: "ghost icon", type: "button" });
+    const slider = h("input", { type: "range", min: 0, max: 100, step: 1, class: "volume grow" });
+    const volText = h("output", { class: "vol-text" });
+    muteBtn.onclick = () => {
+      t.d = { ...t.d, muted: !t.d.muted };
+      paint();
+      patch(id, { muted: t.d.muted });
+    };
+    // Volume follows the finger locally and reaches the TV at most every 150ms.
+    let pending = null, timer = null;
+    const sendVolume = () => {
+      timer = null;
+      if (pending == null) return;
+      const body = pending;
+      pending = null;
+      patch(id, body);
+      timer = setTimeout(sendVolume, 150);
+    };
+    slider.addEventListener("input", () => {
+      const volume = Number(slider.value);
+      t.volumeHeld = performance.now();
+      const body = { volume };
+      if (t.d.muted && volume > 0) body.muted = false;
+      t.d = { ...t.d, volume, muted: body.muted === false ? false : t.d.muted };
+      pending = { ...(pending || {}), ...body };
+      paint();
+      if (!timer) sendVolume();
+    });
+
+    // The mic: on/off, its level, and how much room it sounds like it's in.
+    const micBtn = h("button", { class: "ghost icon", type: "button", onclick: () => {
+      t.d = { ...t.d, mic: !t.d.mic };
+      paint();
+      patch(id, { mic: t.d.mic });
+      if (t.d.mic && t.d.mic_state !== "on") flash("If " + t.d.name + " asks, allow the microphone on it", "ok");
+    } });
+    const micSlider = h("input", { type: "range", min: 0, max: 100, step: 1, class: "volume grow" });
+    const micText = h("output", { class: "vol-text" });
+    micSlider.addEventListener("input", () => {
+      t.volumeHeld = performance.now();
+      t.d = { ...t.d, mic_volume: Number(micSlider.value) };
+      pending = { ...(pending || {}), mic_volume: t.d.mic_volume };
+      paint();
+      if (!timer) sendVolume();
+    });
+    const reverbButtons = REVERBS.map(([value, label]) => h("button", { type: "button", "data-reverb": value,
+      onclick: () => { t.d = { ...t.d, reverb: value }; paint(); patch(id, { reverb: value }); } }, label));
+    const micNote = noteEl();
+
+    // Recording: saves each song this screen plays, and it needs that screen's mic.
+    const recBtn = h("button", { class: "ghost icon rec-btn", type: "button", onclick: () => {
+      t.d = { ...t.d, record: !t.d.record };
+      paint();
+      patch(id, { record: t.d.record });
+    } });
+    const recText = h("span", { class: "setting-value grow" });
+    const recNote = noteEl();
+
+    const layoutButtons = LAYOUTS.map(([value, label]) => h("button", { type: "button", "data-layout": value,
+      onclick: () => {
+        if (t.d.layout === value) return;
+        t.d = { ...t.d, layout: value };
+        paint();
+        patch(id, { layout: value });
+      } }, label));
+
+    const identifyBtn = h("button", { class: "quiet small", type: "button", onclick: () => {
+      t.el.classList.remove("identify");
+      void t.el.offsetWidth;
+      t.el.classList.add("identify");
+      patch(id, { action: "identify" });
+    } }, "Identify");
+    tv.addEventListener("animationend", (e) => { if (e.animationName === "identify") t.el.classList.remove("identify"); });
+    const fullBtn = h("button", { class: "quiet small", type: "button", onclick: () => {
+      patch(id, { action: "fullscreen" });
+      flash("Asked " + t.d.name + " to go fullscreen. It may need one tap on the TV itself.", "ok");
+    } }, "Fullscreen");
+    const renameBtn = h("button", { class: "quiet small", type: "button" }, "Rename");
+    const removeBtn = d.panel ? null : h("button", { class: "quiet small", type: "button", onclick: act(async () => {
+      if (!confirm("Remove " + t.d.name + "? It has to ask to join again.")) return;
+      await api("DELETE", base + "/displays/" + encodeURIComponent(id));
+    }) }, "Remove");
+
+    // Inline rename: the screen's name turns into a text field.
+    const nameInput = h("input", { class: "tv-name-input", maxlength: 32, "aria-label": "Screen name", autocomplete: "off" });
+    const finishRename = (save) => {
+      if (!t.editing) return;
+      t.editing = false;
+      const value = nameInput.value.trim();
+      nameInput.replaceWith(nameEl);
+      renameBtn.textContent = "Rename";
+      if (save && value && value !== t.d.name) {
+        t.d = { ...t.d, name: value };
+        patch(id, { name: value });
+      }
+      paint();
+      renameBtn.focus();
+    };
+    renameBtn.onclick = () => {
+      if (t.editing) return finishRename(true);
+      t.editing = true;
+      nameInput.value = t.d.name;
+      nameEl.replaceWith(nameInput);
+      renameBtn.textContent = "Save name";
+      nameInput.focus();
+      nameInput.select();
+    };
+    nameInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); finishRename(true); }
+      if (e.key === "Escape") { e.preventDefault(); finishRename(false); }
+    });
+    nameInput.addEventListener("blur", (e) => { if (e.relatedTarget !== renameBtn) finishRename(true); });
+
+    // Speakers: a picker once the screen has listed its outputs, otherwise why it can't yet.
+    const sinkSelect = h("select", { class: "grow", "aria-label": "Speakers for " + d.name, onchange: () => {
+      t.d = { ...t.d, sink: sinkSelect.value };
+      patch(id, { sink: sinkSelect.value });
+    } });
+    const listBtn = h("button", { class: "ghost small", type: "button", onclick: () => {
+      patch(id, { action: "speakers" });
+      flash("Tap the screen on " + t.d.name + " and allow the microphone so it can list its speakers", "ok");
+    } }, "List speakers");
+    const speakerNote = noteEl();
+    let shownOutputs = "";
+
+    const speakers = setting(id, "speakers", "Speakers", [sinkSelect, listBtn], speakerNote);
+    const micSetting = setting(id, "mic", "Mic", [micBtn, micSlider, micText], micNote);
+    const reverbSetting = setting(id, "reverb", "Reverb",
+      h("div", { class: "segmented grow", role: "group", "aria-label": "Reverb" }, reverbButtons));
+    const recSetting = setting(id, "record", "Record", [recBtn, recText], recNote);
+    const micGroup = h("div", { class: "tile-group" }, micSetting, reverbSetting, recSetting);
+    const soundGroup = h("div", { class: "tile-group" },
+      setting(id, "volume", "Volume", h("div", { class: "row volume-row grow" }, muteBtn, slider, volText)),
+      speakers);
+    const elsewhereNote = h("p", { class: "setting-note elsewhere-note", hidden: true });
+
+    t.el = h("article", { class: "tv-tile card" + (d.panel ? " panel-tile" : ""), "data-id": id },
+      h("header", { class: "tile-head" },
+        tv,
+        h("div", { class: "tile-title" }, nameEl, h("div", { class: "tile-status" }, stateChip, recMark)),
+        h("div", { class: "tile-actions" }, identifyBtn, fullBtn, renameBtn, removeBtn)),
+      h("div", { class: "tile-group" },
+        setting(id, "playback", "Playback", h("div", { class: "row transport grow" }, playBtn, restartBtn, time)),
+        setting(id, "layout", "Layout", h("div", { class: "segmented layouts grow", role: "group", "aria-label": "Layout" }, layoutButtons))),
+      soundGroup,
+      micGroup,
+      elsewhereNote);
+
+    let shownLayout = d.layout;
+    function paint() {
+      const s = t.d;
+      t.el.setAttribute("aria-label", s.name);
+      screen.dataset.state = s.state;
+      tv.dataset.state = s.state;
+      t.el.dataset.state = s.state;
+      if (!t.editing) nameEl.textContent = s.name;
+      stateChip.textContent = STATE_TEXT[s.state] || "Idle";
+      if (s.layout !== shownLayout) {
+        const fresh = pict(s.layout);
+        fresh.classList.add("enter");
+        picture.replaceWith(fresh);
+        picture = fresh;
+        shownLayout = s.layout;
+      }
+      for (const b of layoutButtons) b.setAttribute("aria-pressed", String(b.dataset.layout === s.layout));
+      const playing = s.state === "playing" || s.state === "buffering";
+      playBtn.replaceChildren(icon(playing ? "pause" : "play"));
+      playBtn.setAttribute("aria-label", playing ? "Pause" : "Play");
+      playBtn.title = playing ? "Pause" : "Play";
+      muteBtn.replaceChildren(icon(s.muted ? "muted" : "speaker"));
+      muteBtn.setAttribute("aria-label", s.muted ? "Unmute" : "Mute");
+      muteBtn.setAttribute("aria-pressed", String(s.muted));
+      muteBtn.title = s.muted ? "Unmute" : "Mute";
+      if (document.activeElement !== slider || performance.now() - t.volumeHeld > 1000) slider.value = s.volume;
+      slider.setAttribute("aria-label", "Volume for " + s.name);
+      slider.style.setProperty("--fill", s.volume + "%");
+      slider.classList.toggle("is-muted", s.muted);
+      volText.textContent = s.muted ? "Muted" : s.volume;
+      paintSpeakers(s);
+      paintMic(s);
+      tick();
+    }
+
+    function paintMic(s) {
+      // Another screen (or this page) has the sound: this one plays muted, without its mic.
+      const from = soundFrom(), elsewhere = !!from && from !== id;
+      const source = from === panelId ? "this page" : (tiles.get(from) || { d: { name: "another screen" } }).d.name;
+      soundGroup.hidden = elsewhere;
+      setNote(elsewhereNote, elsewhere ? "Muted while the sound comes from " + source + ". Its picture follows along." : "");
+      micGroup.hidden = elsewhere || s.mic_state === "unsupported";
+      micBtn.replaceChildren(icon(s.mic ? "mic" : "mic-off"));
+      micBtn.setAttribute("aria-label", s.mic ? "Turn the mic off" : "Turn the mic on");
+      micBtn.title = micBtn.getAttribute("aria-label");
+      micBtn.setAttribute("aria-pressed", String(s.mic));
+      if (document.activeElement !== micSlider || performance.now() - t.volumeHeld > 1000) micSlider.value = s.mic_volume;
+      micSlider.setAttribute("aria-label", "Mic volume for " + s.name);
+      micSlider.style.setProperty("--fill", s.mic_volume + "%");
+      micSlider.classList.toggle("is-muted", !s.mic);
+      micText.textContent = s.mic ? s.mic_volume : "Off";
+      for (const b of reverbButtons) b.setAttribute("aria-pressed", String(Number(b.dataset.reverb) === s.reverb));
+      setNote(micNote, s.mic_state === "blocked"
+        ? "The screen wasn't allowed to use its microphone. Allow it in that browser's site settings, then turn the mic on again."
+        : s.mic && s.mic_state === "on" ? "Keep the mic behind the speakers, or it'll squeal." : "");
+
+      recSetting.hidden = !recordingsOn;
+      const live = !!s.recording;
+      recMark.hidden = !live;
+      t.el.classList.toggle("is-recording", live);
+      recBtn.replaceChildren(icon(s.record ? "rec" : "rec-off"));
+      recBtn.setAttribute("aria-pressed", String(!!s.record));
+      recBtn.setAttribute("aria-label", s.record ? "Stop recording on " + s.name : "Record songs on " + s.name);
+      recBtn.title = s.record ? "Stop recording" : "Record each song";
+      // Turning it on needs the mic; turning it off never does.
+      recBtn.disabled = !s.mic && !s.record;
+      recText.textContent = !s.record ? "Off" : live ? "Recording this song" : s.mic ? "Saves every song" : "On, waiting for the mic";
+      setNote(recNote, !s.mic ? "Turn the mic on to record."
+        : s.record ? "Library songs save your voice and the music. YouTube songs save just the voice." : "");
+    }
+
+    function paintSpeakers(s) {
+      const outputs = s.outputs || [];
+      const ready = s.audio === "ready";
+      sinkSelect.hidden = !ready;
+      listBtn.hidden = s.audio !== "locked";
+      sinkSelect.parentElement.hidden = s.audio === "unsupported";
+      const key = JSON.stringify(outputs);
+      if (ready && key !== shownOutputs && document.activeElement !== sinkSelect) {
+        shownOutputs = key;
+        const known = outputs.some((o) => o.id === s.sink);
+        sinkSelect.replaceChildren(h("option", { value: "" }, "Default speakers"),
+          ...outputs.filter((o) => o.id !== "default").map((o) => h("option", { value: o.id }, o.label)),
+          ...(s.sink && !known ? [h("option", { value: s.sink }, "A speaker that's unplugged")] : []));
+      }
+      if (document.activeElement !== sinkSelect) sinkSelect.value = s.sink || "";
+      const np = state && state.now_playing;
+      setNote(speakerNote, s.audio === "unsupported"
+        ? "Picking speakers needs Chrome or Edge, and the screen opened over https or on localhost. It uses its default speakers."
+        : s.audio === "locked" ? "Uses its default speakers until it lists the others."
+        : np && np.video_id && !np.media && !np.file ?"YouTube songs always play through the default speakers."
+        : "");
+    }
+
+    // Between reports from the TV, run the clock locally so the bar moves smoothly.
+    function tick() {
+      const s = t.d;
+      let now = s.time;
+      if (now != null && s.state === "playing") now += (performance.now() - t.at) / 1000;
+      if (now != null && s.duration) now = Math.min(now, s.duration);
+      const known = now != null && s.duration > 0;
+      progress.hidden = !known || s.state === "idle" || s.state === "error";
+      if (known) bar.style.transform = "scaleX(" + (now / s.duration).toFixed(4) + ")";
+      time.textContent = s.state === "error" ? s.reason || "This song can't play on this screen. Press Next."
+        : known ? clock(now) + " of " + clock(s.duration) : s.state === "idle" ? "Nothing playing on this screen" : "";
+      time.classList.toggle("is-error", s.state === "error");
+    }
+
+    t.update = (fresh) => {
+      // Don't let a slow server echo yank the slider out from under a finger.
+      const holding = performance.now() - t.volumeHeld < 1000;
+      t.d = holding ? { ...fresh, volume: t.d.volume, muted: t.d.muted, mic_volume: t.d.mic_volume } : fresh;
+      t.at = performance.now();
+      paint();
+    };
+    t.tick = tick;
+    t.paint = paint;
+    t.update(d);
+    return t;
+  }
+
+  setInterval(() => { for (const t of tiles.values()) if (t.d.state === "playing") t.tick(); }, 500);
+
+  function openScreenWindow() {
+    const w = window.open(screenUrl, "kq-screen-" + Date.now(), "popup,width=1280,height=720");
+    if (!w) location.href = screenUrl;
+  }
+
+  // A second monitor on this computer (Chrome and Edge, https or localhost): ask which screens
+  // exist and open the screen page sized to the one this page isn't on. Press F there to fill it.
+  async function openOnOtherMonitor() {
+    let details;
+    try { details = await window.getScreenDetails(); }
+    catch {
+      openScreenWindow();
+      return flash("The browser didn't allow seeing your monitors, so this opened as a normal window. Drag it over.");
+    }
+    const other = details.screens.find((s) => s !== details.currentScreen);
+    if (!other) return flash("Only one monitor is plugged in right now.");
+    const where = `left=${other.availLeft},top=${other.availTop},width=${other.availWidth},height=${other.availHeight}`;
+    const w = window.open(screenUrl, "kq-screen-" + Date.now(), "popup," + where);
+    if (!w) flash("The browser blocked the new window. Allow popups for this page and try again.");
+  }
+
+  // Chromecast and other presentation displays: the cast page is just another screen,
+  // so it says hello on its own and shows up in the list like any TV.
+  // Chrome renders the page itself and streams it, so even a localhost link casts fine.
+  let castRequest = null;
+  async function castScreen() {
+    try { await castRequest.start(); }
+    catch (e) { if (e.name !== "AbortError" && e.name !== "NotAllowedError") flash("Couldn't cast: " + (e.message || "no display answered")); }
+  }
+
+  async function findLaunchers() {
+    // The screen link must be https too (set KARAQUEUE_PUBLIC_URL behind a proxy), or there's no Cast button.
+    if (window.PresentationRequest && window.isSecureContext) {
+      try { castRequest = new PresentationRequest([screenUrl]); } catch (_) { castRequest = null; }
+    }
+    if (window.isSecureContext && "getScreenDetails" in window) {
+      // Only offer the button when there's more than one monitor (no permission needed to ask that).
+      const many = () => { $("open-monitor").hidden = !window.screen.isExtended; };
+      many();
+      window.screen.addEventListener?.("change", many);
+    }
+    if (castRequest) {
+      try {
+        const availability = await castRequest.getAvailability();
+        const sync = () => { $("cast").hidden = !availability.value; };
+        sync();
+        availability.onchange = sync;
+      } catch { /* no background discovery here; leave the button hidden */ }
+    }
+  }
+
+  async function loadJoinInfo() {
+    try {
+      const info = await api("GET", base + "/join-info");
+      guestUrl = info.link;
+      $("invite-qr").innerHTML = info.qr_svg; // Server-generated QR markup.
+      $("local-warning").hidden = !info.local;
+      screenUrl = info.home + "/r/" + code + "/screen";
+    } catch (_) { /* the local origin is a fine fallback */ }
+    document.querySelectorAll(".screen-url").forEach((el) => { el.textContent = screenUrl.replace(/^https?:\/\//, ""); });
+    document.querySelectorAll(".screen-here").forEach((el) => { el.href = "/r/" + code + "/screen"; });
+  }
+
+  async function loadConfig() {
+    try {
+      const cfg = await api("GET", "/config");
+      recordingsOn = !!cfg.recordings;
+      if (recordingsOn) $("recordings-help").textContent = "Turn on recording in Screens & sound to save each performance here.";
+      $("library-rule").hidden = !cfg.library;
+      // Hosts can always search whatever the server has, whatever the room lets guests use.
+      finding = { library: !!cfg.library, youtube: !!cfg.youtube_search };
+      $("find").hidden = !finding.library && !finding.youtube;
+      $("find-q").placeholder = finding.library && finding.youtube ? "Search the library or YouTube" : finding.library ? "Search the song library" : "Search YouTube for a karaoke video";
+      $("save-section").hidden = !cfg.saving;
+      if (cfg.saving) songSaver({
+        search: (q) => api("GET", base + "/search?q=" + encodeURIComponent(q)),
+        save: (body) => api("POST", base + "/saves", body),
+        list: () => api("GET", base + "/saves"),
+      });
+    } catch (_) { /* leave recording and the library rule hidden */ }
+    for (const t of tiles.values()) t.paint();
+    refreshRecordings();
+  }
+
+  // ---- Wiring ----
+  // Sends which song it means, so a tap that crosses a screen moving on by itself (or a double
+  // tap) doesn't skip the next singer too. One at a time.
+  let moving = false;
+  const next = act(async () => {
+    if (moving) return;
+    const np = state && state.now_playing;
+    // A song ending moves on by itself, so Next mid-song is a skip: worth one tap to be sure.
+    if (np && !confirm("Skip the rest of " + np.singer + "'s song?")) return;
+    moving = true;
+    try { await api("POST", base + "/next", { after: (np && np.id) || 0 }); }
+    finally { moving = false; }
+  });
+  $("next").onclick = next;
+  $("dock-next").onclick = next;
+  $("pause").onclick = act(() => api("PUT", base + "/paused", { value: !state.paused }));
+  $("limit").onchange = act(async () => {
+    const n = Number($("limit").value);
+    if (!Number.isInteger(n) || n < 1) { $("limit").value = state.options.limit; throw new Error("Pick a whole number from 1 up"); }
+    await api("PUT", base + "/options", { songs_per_singer: n });
+  });
+  $("limit-reset").onclick = act(() => api("PUT", base + "/options", { songs_per_singer: null }));
+  $("open-window").onclick = openScreenWindow;
+  $("open-monitor").onclick = openOnOtherMonitor;
+  $("cast").onclick = castScreen;
+  document.querySelectorAll(".copy-screen").forEach((b) => b.onclick = act(async () => {
+    await copyText(screenUrl);
+    flash("Screen link copied", "ok");
+  }));
+  $("copy-host").onclick = act(async () => {
+    if (!confirm("Copy a link that makes whoever opens it a host of this room? They can skip songs, remove singers and control the screens. Only send it to someone you trust.")) return;
+    await copyText(location.origin + "/r/" + code + "/host#key=" + keys.get(code).token);
+    flash("Host link copied", "ok");
+  });
+  // Library songs play from the server itself, so they come first, like on the guest page.
+  let finding = { library: false, youtube: false }, pickedMedia = null, searches = 0;
+  const find = act(async () => {
+    const q = $("find-q").value.trim(), button = $("find-go");
+    if (!q) return;
+    // Enter can start a search while one is still out; only the newest one gets shown.
+    const mine = ++searches;
+    button.disabled = true;
+    let results, skipped = false;
+    try {
+      const [local, online] = await Promise.all([
+        finding.library ? api("GET", base + "/library?q=" + encodeURIComponent(q)) : [],
+        finding.youtube ? api("GET", base + "/search?q=" + encodeURIComponent(q)).catch((e) => {
+          if (!finding.library) throw e;
+          skipped = true;
+          return [];
+        }) : [],
+      ]);
+      results = local.map((r) => ({ ...r, media: r.id })).concat(online);
+    } finally { if (mine === searches) button.disabled = false; }
+    if (mine !== searches) return;
+    show("find-results", skipped ? h("li", { class: "empty muted" }, "YouTube search didn't answer, so these are only songs from the library.") : null,
+      results.length ? results.map((r) => h("li", {},
+      h("button", { type: "button", class: "result", onclick: () => pickSong(r) },
+        r.media ? h("span", { class: "local" }, icon("note"))
+          : r.thumbnail ? h("img", { src: r.thumbnail, alt: "", width: 72, height: 54 }) : null,
+        h("span", { class: "grow" }, h("span", { class: "t" }, r.title),
+          h("span", { class: "c" }, r.media ? (r.artist ? r.artist + ", from" : "From") + " the song library" : r.channel)))))
+      : h("li", { class: "empty muted" }, "Nothing found. Try fewer words or just the song name."));
+  });
+  function pickSong(r) {
+    const guess = r.media ? { title: r.title, artist: r.artist || "" } : guessSong(r.title);
+    $("title").value = guess.title;
+    $("artist").value = guess.artist;
+    $("video").value = r.media ? "" : r.video_id;
+    pickedMedia = r.media || null;
+    show("find-results");
+    $("add").querySelector("button[type=submit]").focus();
+  }
+  $("find-go").onclick = find;
+  // Enter in the search box searches instead of adding whatever's in the form.
+  $("find-q").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); find(); } };
+  // Typing a YouTube link means they want that instead of the library file they picked.
+  $("video").addEventListener("input", () => { pickedMedia = null; });
+  $("add").onsubmit = act(async (e) => {
+    e.preventDefault();
+    const title = $("title"), artist = $("artist"), video = $("video");
+    await api("POST", base + "/songs", { title: title.value, artist: artist.value, video: video.value, media: pickedMedia, singer_id: Number($("for").value) });
+    title.value = artist.value = video.value = $("find-q").value = "";
+    pickedMedia = null;
+    flash("Song added", "ok");
+  });
+
+  // On phones the Next song button follows you down the page once the show scrolls away.
+  const narrow = matchMedia("(max-width: 999px)");
+  let showVisible = true;
+  const syncDock = () => {
+    const on = narrow.matches && !showVisible && state != null && document.body.dataset.view === "overview";
+    $("dock").hidden = !on;
+    document.body.classList.toggle("docked", on);
+  };
+  new IntersectionObserver(([entry]) => { showVisible = entry.isIntersecting; syncDock(); }).observe($("next"));
+  narrow.addEventListener("change", syncDock);
+
+  const views = {
+    overview: ["The queue", "A great night, one singer at a time."],
+    screens: ["Screens & sound", "Set the stage. Choose a layout, speakers, and microphone."],
+    songs: ["Add a song", "Help someone find their next moment on the mic."],
+    settings: ["Room settings", "Make the night work for your crowd."],
+    recordings: ["Recordings", "The performances worth playing again."]
+  };
+  function switchView(view, focus = false) {
+    if (!views[view]) view = "overview";
+    document.body.dataset.view = view;
+    $("view-title").textContent = views[view][0];
+    $("view-description").textContent = views[view][1];
+    document.querySelectorAll(".host-nav button").forEach(button => {
+      if (button.dataset.hostView === view) button.setAttribute("aria-current", "page");
+      else button.removeAttribute("aria-current");
+    });
+    syncDock();
+    if (focus) $("view-title").focus({ preventScroll: true });
+  }
+  document.querySelectorAll("[data-host-view]").forEach(button => button.onclick = () => {
+    history.replaceState(null, "", "#" + button.dataset.hostView);
+    switchView(button.dataset.hostView, true);
+    window.scrollTo(0, 0);
+  });
+  addEventListener("hashchange", () => switchView(location.hash.slice(1)));
+  switchView(location.hash.slice(1));
+  $("guest-view").href = "/r/" + code + "?guest=1";
+  $("copy-guest").onclick = act(async () => { await copyText(guestUrl); flash("Guest link copied", "ok"); });
+  loadJoinInfo().then(findLaunchers);
+  loadConfig();
+  live(() => { refresh(); refreshRecordings(); }, {
+    onopen: () => { refreshDisplays(); refreshWaiting(); },
+    onmessage: (msg) => {
+      if (msg.type === "displays") refreshDisplays();
+      else if (msg.type === "waiting") refreshWaiting();
+    },
+  });
+</script>
+</body>
+</html>

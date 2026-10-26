@@ -1,0 +1,19 @@
+# Run KaraQueue with `docker compose up -d`, then open http://localhost:8000.
+# Settings go in .env (copy .env.example). See docs/install.md for the rest.
+services:
+  karaqueue:
+    build: .
+    container_name: karaqueue
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - karaqueue-data:/data
+      # Your karaoke songs. Drop ":ro" if you want to delete songs or save YouTube songs into it.
+      - ./songs:/media:ro
+
+volumes:
+  karaqueue-data:

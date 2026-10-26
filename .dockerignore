@@ -1,0 +1,6 @@
+.git
+.venv
+tests
+*.db
+admin-setup-link.txt
+docs

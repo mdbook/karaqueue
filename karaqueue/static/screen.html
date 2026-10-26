@@ -1,0 +1,848 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KaraQueue screen</title>
+  <link rel="icon" href="/static/KaraQueue-Icon.png">
+  <script src="/static/theme.js"></script>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/screen.css">
+</head>
+<body class="screen" data-layout="split">
+<div class="screen-theme"><label class="theme-picker"><span class="sr">Color theme</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg><select data-theme-picker aria-label="Color theme"><option value="sunset">Sunset</option><option value="midnight">Midnight</option><option value="daylight">Daylight</option></select></label></div>
+<main id="screen">
+  <div id="stage-wrap">
+    <div id="stage">
+      <div id="player"></div>
+      <video id="file" playsinline preload="auto"></video>
+      <canvas id="cdg"></canvas>
+      <div id="stage-empty"></div>
+    </div>
+  </div>
+  <section id="now" aria-live="polite"></section>
+  <section id="next"></section>
+  <section id="order">
+    <h2>Coming up</h2>
+    <ol id="rotation"></ol>
+  </section>
+  <section id="join">
+    <h1 id="room-name"></h1>
+    <div id="qr"></div>
+    <p id="join-scan">Scan to add a song</p>
+    <p id="join-how">or go to <span id="join-url"></span> and enter</p>
+    <div class="code" id="room-code"></div>
+  </section>
+</main>
+
+<div id="stuck" role="status" hidden></div>
+<section id="gone" role="alert" hidden><h1>This room has ended</h1><p>There's no room <span id="gone-code"></span> anymore. Start a new room, then open its screen.</p></section>
+<div id="badge" aria-hidden="true"></div>
+<div id="ident" aria-live="assertive"></div>
+<button id="start" type="button">
+  <img src="/static/KaraQueue-Icon.png" alt="">
+  <span class="start-title" id="start-title">Let’s hear it.</span>
+  <span class="start-sub" id="start-sub">Tap to turn on sound and go full screen. Your next great performance starts here.</span>
+</button>
+<div id="pairing" role="status" aria-live="polite" hidden></div>
+<div id="flash" role="status" aria-live="polite" hidden></div>
+
+<script src="/static/kq.js"></script>
+<script src="/static/kq-cdg.js"></script>
+<script>
+  const LAYOUTS = ["split", "video", "queue", "splash", "confidence"];
+  const VIDEO_LAYOUTS = ["split", "video", "confidence"];
+  const $ = (id) => document.getElementById(id);
+  const body = document.body;
+
+  // ---- Identity. ----
+  // The id lives in sessionStorage so two screen windows in one browser stay two screens,
+  // while a reload of the same tab reconnects as the same screen. Settings are kept per id.
+  // crypto.randomUUID needs a secure context, which a plain-http LAN address isn't.
+  function randomBytes(n) { const a = new Uint8Array(n); crypto.getRandomValues(a); return a; }
+  const hex = (n) => Array.from(randomBytes(n), (b) => b.toString(16).padStart(2, "0")).join("");
+  const cleanName = (v) => String(v || "").split(/\s+/).filter(Boolean).join(" ").slice(0, 32);
+
+  // A new tab takes over the last screen this browser was, unless that screen is still open
+  // in another window (it writes a heartbeat every couple of seconds). So a TV that reboots
+  // comes back as the same screen, and a second window becomes a second screen.
+  const validId = (v) => /^[0-9a-f]{8,40}$/.test(v || "");
+  // ?panel=<id>: the host page loaded this, hidden, to play the sound on the host's own computer.
+  // It keeps the id the host page gave it and leaves this browser's screen identity alone.
+  const params = new URLSearchParams(location.search);
+  const panel = validId(params.get("panel")) ? params.get("panel") : null;
+  let displayId = panel || sessionStorage.getItem("kq:display");
+  if (!validId(displayId)) {
+    const last = localStorage.getItem("kq:display:last");
+    const beat = Number(localStorage.getItem("kq:display:beat:" + last)) || 0;
+    displayId = validId(last) && Date.now() - beat > 5000 ? last : hex(12);
+    sessionStorage.setItem("kq:display", displayId);
+  }
+  if (!panel) localStorage.setItem("kq:display:last", displayId);
+  const heartbeat = () => localStorage.setItem("kq:display:beat:" + displayId, String(Date.now()));
+  heartbeat();
+  setInterval(heartbeat, 2000);
+  const settingsKey = "kq:display:" + displayId;
+  const saved = JSON.parse(localStorage.getItem(settingsKey) || "null") || {};
+  const letters = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const display = {
+    id: displayId,
+    name: panel ? "Host page" : cleanName(params.get("name")) || cleanName(saved.name)
+      || "Screen " + Array.from(randomBytes(2), (b) => letters[b % letters.length]).join(""),
+    layout: panel ? "video" : LAYOUTS.includes(saved.layout) ? saved.layout : "split",
+    volume: Number.isFinite(saved.volume) ? saved.volume : 100,
+    muted: !!saved.muted,
+    sink: typeof saved.sink === "string" ? saved.sink : "",
+    mic: !!saved.mic,
+    mic_volume: Number.isFinite(saved.mic_volume) ? saved.mic_volume : 80,
+    reverb: Number.isFinite(saved.reverb) ? saved.reverb : 25,
+    record: !!saved.record,
+  };
+  const persist = () => localStorage.setItem(settingsKey, JSON.stringify(display));
+  persist();
+
+  // ---- The room socket: say hello on every connect, report status, obey commands. ----
+  let sock = null;
+  const send = (msg) => { if (sock && sock.readyState === 1) sock.send(JSON.stringify(msg)); };
+  // A screen joins with the host's token when this browser is the host's (the host page's own
+  // sound screen, or a screen opened on the host's laptop), or with the key the host gave it
+  // when they let it in. Otherwise it waits, showing a code, until the host lets it in.
+  const screenKey = "kq:screen:" + code + ":" + displayId;
+  const hello = () => {
+    const mine = keys.get(code);
+    const { record, ...about } = display; // recording is the host's call, not the screen's
+    send({ type: "hello", display: { ...about, panel: !!panel }, host: mine && mine.token || undefined,
+      key: localStorage.getItem(screenKey) || undefined });
+  };
+  function showPairing(match) {
+    const el = $("pairing");
+    if (!match) { el.hidden = true; return; }
+    el.replaceChildren(
+      h("span", {}, "Waiting for the host to let this screen in. Code"),
+      h("span", { class: "pair-code" }, match),
+      h("span", { class: "pair-how" }, "The host lets it in from Screens & sound, by this code."));
+    el.hidden = false;
+  }
+  // Refused or turned away while waiting: say so where the code was, so the screen doesn't sit
+  // showing a code nobody will match. A refusal because too many were asking tries again later.
+  let askAgain = null;
+  function notLetIn(msg) {
+    $("pairing").replaceChildren(h("span", {}, msg.detail),
+      h("span", { class: "pair-how" }, msg.retry ? "Trying again in a minute." : "Reload this page to ask again."));
+    $("pairing").hidden = false;
+    clearTimeout(askAgain);
+    if (msg.retry) askAgain = setTimeout(hello, 60000);
+  }
+  function onWelcome(msg) {
+    if (msg.key) localStorage.setItem(screenKey, msg.key);
+    showPairing(null);
+    uploadKey = msg.upload || null;
+    if (msg.settings) display.record = !!msg.settings.record;
+    onSound(msg);
+    syncRecording();
+  }
+
+  function applySettings(s) {
+    const before = display.layout;
+    if (s.name != null && cleanName(s.name)) display.name = cleanName(s.name);
+    if (LAYOUTS.includes(s.layout) && !panel) display.layout = s.layout;
+    if (Number.isFinite(s.volume)) display.volume = Math.max(0, Math.min(100, Math.round(s.volume)));
+    if (s.muted != null) display.muted = !!s.muted;
+    const newSink = typeof s.sink === "string" && s.sink !== display.sink;
+    if (typeof s.sink === "string") display.sink = s.sink;
+    if (s.mic != null) display.mic = !!s.mic;
+    if (s.record != null) display.record = !!s.record;
+    for (const k of ["mic_volume", "reverb"]) {
+      if (Number.isFinite(s[k])) display[k] = Math.max(0, Math.min(100, Math.round(s[k])));
+    }
+    persist();
+    $("badge").textContent = display.name;
+    body.dataset.layout = display.layout;
+    applyAudio();
+    if (newSink) applySink(true);
+    applyMic();
+    if (display.layout !== before) { render(); syncVideo(); }
+  }
+
+  function onCommand(msg) {
+    applySettings(msg.settings || {});
+    const ready = deck && body.classList.contains("has-video");
+    switch (msg.action) {
+      case "play": if (ready) deck.play(); break;
+      case "pause": if (ready) deck.pause(); break;
+      case "restart": if (ready) { deck.restart(); doneSong = null; syncRecording(); } break;
+      case "identify": identify(); break;
+      case "fullscreen": goFullscreen().catch(() => showStart("fullscreen")); break;
+      // Hidden inside the host page there's nothing to tap; the host page's own click counts.
+      case "speakers": if (panel) unlockSpeakers(); else showStart("speakers"); break;
+    }
+  }
+
+  // ---- Which speakers this screen plays through. Browsers only let a page pick an output
+  // (setSinkId) in a secure context (https or localhost), and Chrome only names the outputs
+  // once the page has been allowed the microphone, so the host can ask for that tap. ----
+  const canRoute = "setSinkId" in HTMLMediaElement.prototype && !!navigator.mediaDevices;
+
+  async function reportOutputs() {
+    let outputs = [], audio = "unsupported";
+    if (canRoute) {
+      const devices = await navigator.mediaDevices.enumerateDevices().catch(() => []);
+      outputs = devices.filter((d) => d.kind === "audiooutput" && d.deviceId)
+        .map((d) => ({ id: d.deviceId, label: d.label }));
+      audio = outputs.length > 1 ? "ready" : "locked";
+    }
+    send({ type: "outputs", audio, outputs });
+  }
+  if (canRoute) navigator.mediaDevices.addEventListener("devicechange", reportOutputs);
+
+  async function unlockSpeakers() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((t) => t.stop());
+    } catch {
+      flash("No speaker list without that permission. The screen keeps using its default speakers.");
+    }
+    reportOutputs();
+  }
+
+  // Only library songs can be moved; the YouTube player is a frame the page can't reroute.
+  function applySink(loud) {
+    if (!canRoute) return;
+    video.setSinkId(display.sink).catch(() => {
+      if (loud) flash("Couldn't switch to that speaker. Still playing through the last one.");
+    });
+    if (mic && mic.ctx.setSinkId) mic.ctx.setSinkId(display.sink).catch(() => {});
+  }
+
+  // ---- The singer's mic through this screen's speakers, with a little reverb. The mic is
+  // whatever this device records from (a USB mic, an audio interface). Browser processing
+  // (echo cancelling and so on) is off: it adds lag and makes singing sound underwater. ----
+  const canMic = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.AudioContext);
+  let mic = null, micState = canMic ? "off" : "unsupported", micStarting = null;
+
+  // A made-up room: noise that fades out. Longer and slower fades sound like bigger rooms.
+  function impulse(ctx, seconds, decay) {
+    const length = Math.floor(ctx.sampleRate * seconds);
+    const buffer = ctx.createBuffer(2, length, ctx.sampleRate);
+    for (let c = 0; c < 2; c++) {
+      const data = buffer.getChannelData(c);
+      for (let i = 0; i < length; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, decay);
+    }
+    return buffer;
+  }
+
+  async function startMic() {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+    });
+    const ctx = new AudioContext({ latencyHint: "interactive" });
+    const level = ctx.createGain(), dry = ctx.createGain(), wet = ctx.createGain(), room = ctx.createConvolver();
+    room.buffer = impulse(ctx, 2.4, 3);
+    ctx.createMediaStreamSource(stream).connect(level);
+    level.connect(dry).connect(ctx.destination);
+    level.connect(room).connect(wet).connect(ctx.destination);
+    mic = { ctx, stream, level, dry, wet };
+    if (display.sink && ctx.setSinkId) ctx.setSinkId(display.sink).catch(() => {});
+  }
+
+  function stopMic() {
+    if (!mic) return;
+    stopRecording(display.record);
+    mic.stream.getTracks().forEach((t) => t.stop());
+    mic.ctx.close();
+    mic = null;
+  }
+
+  async function applyMic() {
+    if (!canMic) return;
+    // The mic belongs with the sound: a screen that's following another one keeps it off.
+    const want = () => display.mic && !following();
+    if (want() && !mic) {
+      micStarting = micStarting || startMic().then(() => { micState = "on"; reportOutputs(); }, (e) => {
+        micState = "blocked";
+        flash(e.name === "NotAllowedError"
+          ? "This screen isn't allowed to use the microphone. Allow it in the browser's site settings."
+          : "Couldn't find a microphone on this screen.");
+      }).finally(() => { micStarting = null; report(); });
+      await micStarting;
+      if (!want()) return applyMic(); // turned off again while the browser was asking
+    } else if (!want() && mic) {
+      stopMic();
+      micState = "off";
+      report();
+    } else if (!want() && micState === "blocked") {
+      micState = "off";
+      report();
+    }
+    syncRecording();
+    if (!mic) return;
+    // Until someone taps the screen, the browser keeps the sound off.
+    if (interacted && mic.ctx.state === "suspended") mic.ctx.resume();
+    const r = display.reverb / 100, now = mic.ctx.currentTime;
+    mic.level.gain.setTargetAtTime(display.muted ? 0 : (display.mic_volume / 100) * 1.5, now, 0.02);
+    mic.dry.gain.setTargetAtTime(1 - r * 0.35, now, 0.05);
+    mic.wet.gain.setTargetAtTime(r * 1.2, now, 0.05);
+  }
+
+  // ---- Recording. When the host switches it on, this screen records each performance (the mic
+  // with its reverb, plus the music for library songs) and uploads it when the song changes or
+  // ends. YouTube plays in a frame the page can't hear, so those takes are the voice only. ----
+  const REC_TYPES = ["audio/webm;codecs=opus", "audio/ogg;codecs=opus", "audio/mp4"];
+  const recType = window.MediaRecorder && REC_TYPES.find((t) => MediaRecorder.isTypeSupported(t));
+  const MIN_TAKE_MS = 5000; // shorter than this is a false start, not a performance
+  let uploadKey = null, rec = null, doneSong = null;
+
+  function startRecording(songId) {
+    const out = mic.ctx.createMediaStreamDestination();
+    mic.dry.connect(out);
+    mic.wet.connect(out);
+    const recorder = new MediaRecorder(out.stream, { mimeType: recType });
+    const take = { song: songId, recorder, out, ctx: mic.ctx, dry: mic.dry, wet: mic.wet, music: null, chunks: [], started: Date.now() };
+    recorder.ondataavailable = (e) => { if (e.data.size) take.chunks.push(e.data); };
+    rec = take;
+    addMusic();
+    recorder.start(1000);
+    report();
+  }
+
+  // The library video's sound, mixed in under the voice. Its audio track only exists once it plays.
+  function addMusic() {
+    if (!rec || rec.music || deck !== file || !video.currentSrc) return;
+    try {
+      const capture = (video.captureStream || video.mozCaptureStream).call(video);
+      if (!capture.getAudioTracks().length) return;
+      const level = rec.ctx.createGain();
+      level.gain.value = 0.6;
+      rec.music = rec.ctx.createMediaStreamSource(capture);
+      rec.music.connect(level).connect(rec.out);
+    } catch {
+      // No capture in this browser: the take is the voice only.
+    }
+  }
+
+  function stopRecording(keep) {
+    if (!rec) return;
+    const take = rec;
+    rec = null;
+    take.recorder.onstop = () => {
+      for (const node of [take.dry, take.wet, take.music]) { try { node && node.disconnect(take.out); } catch {} }
+      if (keep && take.chunks.length && Date.now() - take.started >= MIN_TAKE_MS) upload(take);
+    };
+    if (take.recorder.state !== "inactive") take.recorder.stop();
+    report();
+  }
+
+  async function upload(take) {
+    const query = "?display=" + encodeURIComponent(displayId) + "&song=" + take.song;
+    try {
+      const res = await fetch("/api/rooms/" + code + "/recordings" + query, {
+        method: "POST",
+        headers: { "Content-Type": recType.split(";")[0], "X-Upload": uploadKey || "" },
+        body: new Blob(take.chunks, { type: recType }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        flash(typeof data.detail === "string" ? data.detail : "Couldn't save that recording.");
+      }
+    } catch {
+      flash("Couldn't save that recording.");
+    }
+  }
+
+  // Record the song that's on, if the host wants it and this screen can: mic on, a recorder, a key.
+  function syncRecording() {
+    const np = state && state.now_playing;
+    const want = display.record && mic && recType && uploadKey && np && np.id !== doneSong ? np.id : null;
+    if (rec && rec.song !== want) stopRecording(display.record);
+    if (want !== null && !rec) startRecording(want);
+  }
+
+  // ---- Two players behind one small interface ("decks"): YouTube, and files from the
+  // server's own song library in a plain <video>. Only layouts that show video use them. ----
+  let deck = null, loadedSong = null, pausedByLayout = false, syncs = 0;
+  // A song that won't play stays on screen as a card until the show moves on, and the host's
+  // panel hears why, so nobody has to catch a toast from across the room.
+  let playError = null; // { song, tv, host }
+  function stuck(tv, host) {
+    const np = state && state.now_playing;
+    playError = np ? { song: np.id, tv, host: host || tv } : null;
+    showStuck();
+    report();
+  }
+  function showStuck() {
+    const np = state && state.now_playing;
+    const on = !!(playError && np && np.id === playError.song);
+    if (!on) playError = null;
+    $("stuck").hidden = !on;
+    if (on) $("stuck").textContent = playError.tv;
+  }
+  const cantPlay = () => stuck("This song can't play here. The host can press Next.", "This song can't play on this screen. Press Next.");
+
+  // 101 and 150: the video's owner doesn't let it play outside youtube.com, common for karaoke channels.
+  function youtubeError(e) {
+    const np = state && state.now_playing;
+    if (![101, 150].includes(e.data)) return cantPlay();
+    if (np && np.download === "failed") return stuck("This song couldn't be downloaded and YouTube won't play it here. The host can press Next.");
+    stuck("YouTube won't play this one here. The host can press Next.",
+      "YouTube won't play this video outside its own site. Press Next. Turning on downloads in the admin page fixes this for next time.");
+    refresh(); // in case downloads just got turned on
+  }
+
+  let player = null, playerReady = null;
+  const YT_STATES = { 0: "ended", 1: "playing", 2: "paused", 3: "buffering" };
+  function ensurePlayer() {
+    if (!playerReady) {
+      playerReady = new Promise((resolve) => {
+        window.onYouTubeIframeAPIReady = () => {
+          player = new YT.Player("player", {
+            host: "https://www.youtube-nocookie.com",
+            playerVars: { autoplay: 1, rel: 0, playsinline: 1, modestbranding: 1 },
+            events: {
+              onReady: () => resolve(player),
+              onStateChange: (e) => { report(); if (e.data === YT.PlayerState.ENDED) finished(); },
+              onError: youtubeError,
+            },
+          });
+        };
+        document.head.append(h("script", { src: "https://www.youtube.com/iframe_api" }));
+      });
+    }
+    return playerReady;
+  }
+  const youtube = {
+    kind: "youtube",
+    prepare: ensurePlayer,
+    load: (np) => player.loadVideoById(np.video_id),
+    play: () => player.playVideo(),
+    pause: () => player.pauseVideo(),
+    restart: () => { player.seekTo(0, true); player.playVideo(); },
+    seek: (t) => player.seekTo(t, true),
+    stop: () => player.stopVideo(),
+    state: () => YT_STATES[player.getPlayerState()] || "idle",
+    unstarted: () => [-1, 5].includes(player.getPlayerState()),
+    time: () => player.getCurrentTime(),
+    duration: () => player.getDuration(),
+    audio: (volume, muted) => { player.setVolume(volume); if (muted) player.mute(); else player.unMute(); },
+  };
+
+  const video = $("file");
+  // MP3+CDG songs: the music plays in the video element, the lyrics get drawn on a canvas over it.
+  const cdg = CdgPlayer($("cdg"));
+  function drawCdg() {
+    if (!body.classList.contains("cdg")) return;
+    cdg.sync(video.currentTime);
+    requestAnimationFrame(drawCdg);
+  }
+  const file = {
+    kind: "file",
+    prepare: () => Promise.resolve(),
+    load: (np) => {
+      body.classList.remove("audio-only");
+      const src = np.file; // a signed link from the server, so it already has a query string
+      body.classList.toggle("cdg", !!np.cdg);
+      cdg.clear();
+      if (np.cdg) {
+        fetch(src + "&part=cdg").then((r) => r.ok ? r.arrayBuffer() : Promise.reject())
+          .then((buf) => { if (video.getAttribute("src") === src) { cdg.load(buf); drawCdg(); } })
+          .catch(cantPlay);
+      }
+      video.src = src;
+      video.play().catch(() => {});
+    },
+    play: () => video.play().catch(() => {}),
+    pause: () => video.pause(),
+    restart: () => { video.currentTime = 0; video.play().catch(() => {}); },
+    seek: (t) => { video.currentTime = t; },
+    stop: () => { video.pause(); video.removeAttribute("src"); video.load(); body.classList.remove("audio-only", "cdg"); cdg.clear(); },
+    state: () => !video.currentSrc ? "idle" : video.ended ? "ended" : video.paused ? "paused"
+      : video.readyState < 3 ? "buffering" : "playing",
+    unstarted: () => video.paused && video.currentTime === 0,
+    time: () => video.currentTime,
+    duration: () => Number.isFinite(video.duration) ? video.duration : null,
+    audio: (volume, muted) => { video.volume = volume / 100; video.muted = muted; },
+  };
+  for (const ev of ["play", "playing", "pause", "waiting", "ended"]) video.addEventListener(ev, report);
+  video.addEventListener("ended", () => finished());
+  video.addEventListener("playing", addMusic);
+  // A file that won't load gets a few more tries a little apart before the screen gives up: the
+  // server turns screens away while it's busy converting old-format videos for other screens.
+  let fileTries = { src: null, n: 0 };
+  video.addEventListener("error", () => {
+    const src = video.getAttribute("src");
+    if (!src) return;
+    if (fileTries.src !== src) fileTries = { src, n: 0 };
+    if (++fileTries.n > 6) return cantPlay();
+    if (fileTries.n === 1) flash("Getting this song ready…", "ok");
+    setTimeout(() => {
+      if (video.getAttribute("src") !== src) return; // the show moved on
+      video.src = src;
+      video.play().catch(() => {});
+    }, 10000);
+  });
+  // Library songs can be audio only; then the stage shows the song instead of a black box.
+  video.addEventListener("loadedmetadata", () => body.classList.toggle("audio-only", video.videoWidth === 0));
+  if (display.sink) applySink(false);
+
+  function applyAudio() {
+    // Until someone taps the screen, browsers only allow muted autoplay.
+    if (deck === youtube && !player) return;
+    if (deck) deck.audio(display.volume, !interacted || display.muted || following());
+  }
+
+  // ---- One place for the sound. When the host picks a screen (or the host panel) for it, every
+  // other screen goes quiet, drops its mic, and keeps its picture in step with that one's music.
+  // If the sound screen goes away, the others start playing their own sound again. ----
+  const SILENT_AFTER_MS = 6000;
+  let leaderClock = null, soundSince = performance.now(), lastSeek = 0, wasFollowing = false;
+  // The server says which screen it is over the socket, once this screen is let in.
+  let soundId = "";
+  const soundFrom = () => soundId;
+  function onSound(msg) {
+    const next = typeof msg.display === "string" ? msg.display : soundId;
+    if (next === soundId) return;
+    soundId = next;
+    soundSince = performance.now();
+    checkFollowing();
+  }
+  const leading = () => soundFrom() === displayId;
+  function following() {
+    const from = soundFrom();
+    if (!from || from === displayId) return false;
+    const heard = Math.max(soundSince, leaderClock && leaderClock.display === from ? leaderClock.at : 0);
+    return performance.now() - heard < SILENT_AFTER_MS;
+  }
+  function checkFollowing() {
+    if (following() === wasFollowing) return;
+    wasFollowing = !wasFollowing;
+    applyAudio();
+    applyMic();
+  }
+  setInterval(checkFollowing, 1000);
+
+  function sendClock() {
+    if (!leading()) return;
+    const active = deck && body.classList.contains("has-video") && !(deck === youtube && !player);
+    send({ type: "clock", song: loadedSong, state: active ? deck.state() : "idle", time: active ? deck.time() : null });
+  }
+  setInterval(sendClock, 1000);
+
+  function onClock(msg) {
+    if (msg.display !== soundFrom()) return;
+    leaderClock = { ...msg, at: performance.now() };
+    checkFollowing();
+    const np = state && state.now_playing;
+    if (!deck || !np || msg.song !== np.id || loadedSong !== np.id || !body.classList.contains("has-video")
+        || (deck === youtube && !player)) return;
+    const mine = deck.state();
+    if (msg.state === "playing" && mine === "paused") deck.play();
+    else if (msg.state === "paused" && mine === "playing") deck.pause();
+    // Nudge only when it's clearly off, and give a seek time to land before judging again.
+    if (msg.state === "playing" && msg.time != null && mine === "playing" && performance.now() - lastSeek > 3000
+        && Math.abs(deck.time() - msg.time) > 0.35) {
+      lastSeek = performance.now();
+      deck.seek(msg.time + 0.1);
+    }
+  }
+
+  function deckFor(np) {
+    if (!np || !VIDEO_LAYOUTS.includes(display.layout)) return null;
+    // A YouTube song the server already downloaded ("file") plays like a library song. One it's
+    // still fetching waits for the file: YouTube's own player is only for when downloads are off,
+    // or the download failed.
+    if (np.file) return file;
+    return np.video_id && np.download !== "pending" ? youtube : null;
+  }
+
+  async function syncVideo() {
+    const mine = ++syncs;
+    const np = state && state.now_playing;
+    const want = deckFor(np);
+    body.classList.toggle("has-video", !!want);
+    if (want) body.dataset.source = want.kind;
+    if (deck && loadedSong !== null && (!want || want !== deck || np.id !== loadedSong)) {
+      const sameSong = np && np.id === loadedSong && (np.media || np.video_id);
+      if (!want && sameSong) {
+        // Same song, just a layout without video: pause so switching back picks up where it was.
+        if (["playing", "buffering"].includes(deck.state())) { deck.pause(); pausedByLayout = true; }
+      } else {
+        deck.stop(); loadedSong = null; pausedByLayout = false;
+      }
+    }
+    if (!want) { report(); return; }
+    await want.prepare();
+    if (mine !== syncs) return; // a newer update already took over
+    deck = want;
+    applyAudio();
+    if (np.id !== loadedSong) { loadedSong = np.id; pausedByLayout = false; deck.load(np); }
+    else if (pausedByLayout) { pausedByLayout = false; deck.play(); }
+  }
+
+  const playing = () => deck && body.classList.contains("has-video") && deck.state() === "playing";
+
+  function report() {
+    const active = deck && body.classList.contains("has-video") && !(deck === youtube && !player);
+    const status = { type: "status", state: active ? deck.state() : "idle", mic: micState, recording: !!rec };
+    if (active) { status.time = deck.time(); status.duration = deck.duration(); }
+    if (playError) { status.state = "error"; status.reason = playError.host; }
+    send(status);
+    sendClock();
+  }
+  setInterval(() => { if (playing()) report(); }, 5000);
+
+  // At the end of a song the screen moves the show along: as host when opened from the host's
+  // browser, otherwise as a screen the host let in. Either way it names the song that ended, so
+  // the server ignores it if the show already moved on and two screens can't double-skip.
+  const finished = act(async () => {
+    if (rec) { doneSong = rec.song; stopRecording(true); }
+    if (loadedSong === null) return;
+    const me = keys.get(code);
+    if (me && me.role === "host") await api("POST", "/rooms/" + code + "/next", { after: loadedSong });
+    else send({ type: "ended", song: loadedSong });
+  });
+
+  // The lower third on the video layout steps aside mid-song so it never sits on the lyrics,
+  // then comes back near the end so the next singer knows to get ready.
+  setInterval(() => {
+    let quiet = false;
+    if (playing()) {
+      const t = deck.time(), d = deck.duration();
+      quiet = t > 15 && d && d - t > 30;
+    }
+    body.classList.toggle("quiet", !!quiet);
+  }, 1000);
+
+  // ---- Drawing the room. ----
+  let state = null, wipedSong = null;
+
+  const songLine = (np) => h("div", { class: "song" }, np.title, h("span", { class: "by" }, np.artist ? " by " + np.artist : ""));
+  const plural = (n) => n === 0 ? "No songs yet" : n === 1 ? "1 song" : n + " songs";
+
+  function idleLines(s) {
+    return s.up_next
+      ? [s.up_next.singer + " is up next", "The host will start the song in a moment."]
+      : ["Nobody's singing yet", "Scan the code to put your name down."];
+  }
+
+  // Singer order, starting with whoever sings after the current singer, so it reads as "what happens next".
+  function orderRows(s) {
+    const all = s.rotation;
+    if (!all.length) return [h("li", { class: "empty" }, "Nobody has joined yet. Scan the code to be first.")];
+    const np = s.now_playing;
+    const cur = np ? all.findIndex((x) => x.name === np.singer) : -1;
+    let start = cur + 1;
+    if (cur < 0) start = s.up_next ? Math.max(0, all.findIndex((x) => x.name === s.up_next.singer)) : 0;
+    const list = all.slice(start).concat(all.slice(0, start));
+    let marked = false;
+    return list.map((x) => {
+      const singing = cur >= 0 && x === all[cur];
+      const next = !marked && !singing && s.up_next && x.name === s.up_next.singer;
+      if (next) marked = true;
+      const cls = singing ? "singing" : next ? "next" : x.queued ? "" : "waiting";
+      return h("li", { class: cls },
+        h("span", { class: "name" }, x.name),
+        h("span", { class: "meta" }, singing ? "Singing now" : next ? "Up next" : plural(x.queued)));
+    });
+  }
+
+  // Shrink the room code until it fits its column, so wide letters and long codes never clip.
+  function fitCode() {
+    const box = $("room-code"), text = box.firstElementChild;
+    if (!text) return;
+    text.style.fontSize = "";
+    const room = box.clientWidth;
+    // A few passes: the display font's letters widen at smaller sizes, so one scale undershoots.
+    for (let scale = 1, i = 0; i < 4 && room; i++) {
+      const need = text.getBoundingClientRect().width;
+      if (need <= room) break;
+      scale *= room / need * 0.99;
+      text.style.fontSize = scale.toFixed(4) + "em";
+    }
+  }
+  addEventListener("resize", fitCode);
+  document.fonts.ready.then(fitCode);
+
+  function render() {
+    const s = state;
+    if (!s) return;
+    const np = s.now_playing;
+    const fresh = np && np.id !== wipedSong;
+    const name = (cls) => wipeText("div", cls + (fresh ? "" : " sung"), np.singer);
+    const [idle, idleSub] = idleLines(s);
+    const layout = display.layout;
+
+    document.title = s.name + " on KaraQueue";
+    $("room-name").textContent = s.name;
+    if ($("room-code").textContent !== s.code) show("room-code", h("span", {}, s.code));
+    fitCode();
+
+    show("now", np ? [name("singer"), songLine(np)]
+      : [h("div", { class: "singer idle" }, idle), h("div", { class: "song" }, idleSub)]);
+
+    show("next", s.up_next
+      ? [h("span", { class: "label" }, "Up next"), h("span", { class: "name" }, s.up_next.singer)]
+      : [h("span", { class: "label" }, "Nobody's next yet")]);
+
+    // What the stage shows when there's no video to play, or it's still on its way.
+    const getting = np && np.download === "pending";
+    const gettingNote = getting && VIDEO_LAYOUTS.includes(layout)
+      ? h("div", { class: "note getting" }, "Getting this song ready. It starts in a moment.") : null;
+    let empty;
+    if (layout === "split") {
+      empty = np
+        ? [h("div", { class: "title" }, np.title), h("div", { class: "artist" }, np.artist),
+           gettingNote || (np.media || np.file ? null : h("div", { class: "note" }, "No video for this one, so it's all you."))]
+        : [h("img", { class: "mark", src: "/static/KaraQueue-Icon.png", alt: "" })];
+    } else {
+      empty = np ? [name("big"), songLine(np), gettingNote] : [h("div", { class: "big" }, idle), h("div", { class: "song" }, idleSub)];
+      if (layout === "video" && np) {
+        empty.push(h("div", { class: "then" }, s.up_next ? s.up_next.singer + " is up next" : "Nobody's next yet"));
+      }
+    }
+    show("stage-empty", empty.filter(Boolean));
+    show("rotation", orderRows(s));
+
+    if (fresh) {
+      wipedSong = np.id;
+      // Let the new name land for a beat, then sing it in.
+      setTimeout(() => document.querySelectorAll(".wipe:not(.sung)").forEach((el) => {
+        void el.offsetWidth;
+        el.classList.add("sung");
+      }), 350);
+    }
+  }
+
+  // While the server fetches the song that's on, check back every few seconds for the file.
+  let gettingTimer = null;
+  const refresh = act(async () => {
+    try {
+      state = await api("GET", "/rooms/" + code);
+    } catch (e) {
+      if (e.status === 404) return roomGone();
+      throw e;
+    }
+    render();
+    showStuck();
+    clearTimeout(gettingTimer);
+    if (state.now_playing && state.now_playing.download === "pending") gettingTimer = setTimeout(refresh, 3000);
+    await syncVideo();
+    syncRecording();
+  });
+
+  // The room was ended or never existed: say so across the whole screen and stop playing.
+  function roomGone() {
+    if (deck) deck.stop();
+    deck = null; loadedSong = null;
+    if (rec) stopRecording(false);
+    $("gone-code").textContent = code;
+    $("gone").hidden = false;
+  }
+
+  fetch("/api/rooms/" + code + "/join-info").then((r) => r.ok ? r.json() : null).then((info) => {
+    if (!info) return;
+    $("join-url").textContent = info.home.replace(/^https?:\/\//, "");
+    $("qr").innerHTML = info.qr_svg; // server-generated SVG, no user text in it
+    if (info.local) $("join-scan").textContent = "This screen is open at localhost, so phones can't join from it. Open it at this computer's network address.";
+  });
+
+  // ---- The tap-to-start overlay, identify, the name badge, full screen. ----
+  // The host page's own click is the tap for its hidden sound screen.
+  let interacted = !!panel;
+  const startEl = $("start");
+  if (panel) startEl.classList.add("gone");
+
+  const START = {
+    start: ["Tap to start", "Tap to turn on sound and go full screen. Your next great performance starts here."],
+    fullscreen: ["Tap to go full screen", "The host asked this screen to fill the display. Browsers need one tap first."],
+    speakers: ["Tap to list speakers", "The host wants to pick which speakers this screen uses. Allow the microphone"
+      + " when asked: that's how browsers let a page see its speakers. Nothing gets recorded."],
+  };
+  let startWhy = "start";
+  function showStart(why) {
+    startWhy = why;
+    [$("start-title").textContent, $("start-sub").textContent] = START[why];
+    startEl.classList.remove("gone");
+  }
+
+  startEl.addEventListener("click", () => {
+    interacted = true;
+    startEl.classList.add("gone");
+    if (startWhy === "speakers") unlockSpeakers();
+    startWhy = "start";
+    applyAudio();
+    applyMic();
+    if (deck && body.classList.contains("has-video") && !(deck === youtube && !player)
+        && deck.unstarted()) deck.play();
+    goFullscreen().catch(() => {});
+  });
+
+  function goFullscreen() {
+    if (document.fullscreenElement) return Promise.resolve();
+    const el = document.documentElement;
+    const request = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (!request) return Promise.reject(new Error("Full screen isn't available here"));
+    return Promise.resolve(request.call(el));
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "f" && e.key !== "F") return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (document.fullscreenElement) document.exitFullscreen();
+    else goFullscreen().catch(() => showStart("fullscreen"));
+  });
+
+  let badgeTimer = null, identTimer = null;
+  function showBadge(ms) {
+    const badge = $("badge");
+    badge.textContent = display.name;
+    badge.classList.add("on");
+    clearTimeout(badgeTimer);
+    badgeTimer = setTimeout(() => badge.classList.remove("on"), ms);
+  }
+  function identify() {
+    const el = $("ident");
+    el.replaceChildren(h("span", { class: "ident-name" }, display.name));
+    el.classList.add("on");
+    clearTimeout(identTimer);
+    identTimer = setTimeout(() => el.classList.remove("on"), 3000);
+    showBadge(8000);
+  }
+
+  // Hide the mouse pointer when nobody's moving it; it's a TV, not a desktop.
+  // The theme picker goes with it, starting from when the page opens, so a TV nobody touches
+  // doesn't keep a menu in the corner all night.
+  let stillTimer = null;
+  const moved = () => {
+    body.classList.remove("still");
+    clearTimeout(stillTimer);
+    stillTimer = setTimeout(() => body.classList.add("still"), 3000);
+  };
+  document.addEventListener("pointermove", moved);
+  moved();
+
+  body.dataset.layout = display.layout;
+  showBadge(6000);
+
+  live(refresh, {
+    onopen: (ws) => { sock = ws; hello(); report(); reportOutputs(); applyMic(); },
+    onmessage: (msg) => {
+      if (msg.type === "command") onCommand(msg);
+      else if (msg.type === "clock") onClock(msg);
+      else if (msg.type === "welcome") onWelcome(msg);
+      else if (msg.type === "waiting" && msg.code) showPairing(msg.code); // without a code it's news for the host page
+      else if (msg.type === "sound") onSound(msg);
+      else if (msg.type === "removed") {
+        // The host took this screen out: forget its key and ask to be let in again.
+        localStorage.removeItem(screenKey);
+        uploadKey = null;
+        onSound({ display: "" });
+        syncRecording();
+        flash("The host removed this screen.");
+        hello();
+      }
+      else if (msg.type === "error" && msg.detail && msg.waiting) notLetIn(msg);
+      else if (msg.type === "error" && msg.detail) flash(msg.detail);
+    },
+  });
+</script>
+</body>
+</html>

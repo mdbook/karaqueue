@@ -1,0 +1,571 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#211820">
+  <title>KaraQueue</title>
+  <link rel="icon" href="/static/KaraQueue-Icon.png">
+  <script src="/static/theme.js"></script>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/room.css">
+</head>
+<body class="guest-page" data-guest-view="queue">
+<a class="skip-link" href="#guest-main">Skip to room</a>
+<div class="guest-brand"><a class="wordmark" href="/"><span class="brand-symbol" aria-hidden="true"><i></i><i></i><i></i></span>KaraQueue</a><label class="theme-picker"><span class="sr">Color theme</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg><select data-theme-picker aria-label="Color theme"><option value="sunset">Sunset</option><option value="midnight">Midnight</option><option value="daylight">Daylight</option></select></label></div>
+<main class="room" id="guest-main">
+  <header class="top">
+    <a class="home" href="/" aria-label="KaraQueue home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></a>
+    <h1 id="room-name">KaraQueue</h1>
+    <div class="roomcode"><span class="muted small">Room</span><span class="code" id="room-code"></span></div>
+  </header>
+
+  <div class="guest-meta"><span class="connection" data-connection role="status">Connecting</span><span>Everyone gets a turn</span></div>
+  <nav class="guest-nav" id="guest-nav" aria-label="Your room" hidden><button type="button" data-guest-view="queue" aria-current="page">The queue</button><button type="button" data-guest-view="songs">My songs <span id="my-song-count">0</span></button><button type="button" data-guest-view="request">Add a song</button></nav>
+  <section class="panel" id="join-card" hidden>
+    <div class="welcome-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l11-2v13M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0M20 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0"/></svg></div><h2>Find your voice.</h2>
+    <p class="muted">Your name shows up on the big screen when it's your turn.</p>
+    <form id="join">
+      <label for="name">What should we call you?</label><input id="name" placeholder="Your name" autocomplete="off" autocapitalize="words" required>
+      <button>Join the room</button>
+    </form>
+    <div id="account-join" hidden>
+      <button type="button" id="join-account"></button>
+      <p class="muted small">Not you? <button type="button" class="link" id="account-out">Sign out</button></p>
+    </div>
+    <details class="account" id="account-box">
+      <summary>Sign in, or make an account</summary>
+      <p class="muted small">An account gets you back to your spot and your songs from any phone, in any room. No email needed.</p>
+      <form id="account">
+        <label for="account-name">Name</label><input id="account-name" autocomplete="username" autocapitalize="words" required>
+        <label for="account-pass">Password</label><input id="account-pass" type="password" autocomplete="current-password" minlength="8" required>
+        <div class="row"><button name="in">Sign in</button><button name="up" class="ghost">Make an account</button></div>
+      </form>
+    </details>
+  </section>
+
+  <section id="turn" class="turn" aria-live="polite" hidden></section>
+
+  <section id="now-card">
+    <h2>Now singing</h2>
+    <div id="now"></div>
+  </section>
+
+  <section class="panel request" id="request-card" hidden>
+    <h2>Your next great performance.</h2><p class="muted small">Find a favorite and make it yours.</p>
+    <p class="paused" id="paused" hidden>Requests are paused for now. Hang tight, the host will open them again soon.</p>
+    <form id="search" hidden>
+      <div class="row">
+        <label class="sr" for="q">Search songs</label><input id="q" type="search" class="grow" placeholder="Search YouTube for a karaoke video" maxlength="100" enterkeyhint="search" autocomplete="off">
+        <button class="ghost">Search</button>
+      </div>
+      <ul id="results"></ul>
+    </form>
+    <p class="muted small hint" id="manual-hint" hidden>Or add it yourself</p>
+    <form id="request">
+      <label for="title">Song title</label><input id="title" placeholder="Song" maxlength="120" autocomplete="off" autocapitalize="words" required>
+      <label for="artist">Artist</label><input id="artist" placeholder="Artist (optional)" maxlength="120" autocomplete="off" autocapitalize="words">
+      <label for="video" id="video-label">YouTube link <span class="muted">(optional)</span></label><input id="video" placeholder="YouTube link (optional)" inputmode="url" autocomplete="off">
+      <button>Add to my songs</button>
+    </form>
+  </section>
+
+  <section id="mine-card" hidden>
+    <h2>My songs</h2><p class="muted small">Your first song is the one you sing next. Change the order any time.</p>
+    <ol id="mine" class="list songs"></ol>
+  </section>
+
+  <section id="takes-card" hidden>
+    <h2>Your recordings</h2>
+    <ol id="takes" class="list songs"></ol>
+  </section>
+
+  <section id="order-card">
+    <h2>Coming up</h2><p class="muted small">One song each, then around we go again.</p>
+    <ol id="rotation" class="list order"></ol>
+  </section>
+
+  <p class="muted small" id="whoami" hidden></p>
+  <section class="panel move" id="move" hidden>
+    <button type="button" class="ghost small" id="move-phone">Use another phone</button>
+    <div id="move-box" hidden></div>
+    <details class="account" id="tie-box" hidden>
+      <summary>Tie this spot to an account</summary>
+      <p class="muted small">Then your spot and your songs follow you to any phone, in any room. No email needed.</p>
+    </details>
+  </section>
+  <div id="flash" role="status" aria-live="polite" hidden></div>
+</main>
+<script src="/static/kq.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  let me = null;
+  let youtube = false, library = false, recordings = false;
+  let server = { youtube: false, library: false }; // what /api/config says is set up
+  let pickedMedia = null;        // a library file chosen from search, sent with the request
+  let lastState = null;
+  const seenSongs = new Set();   // so only songs added after the first load animate in
+  let firstLoad = true;
+  let movedId = null;
+  let nowKey;                    // undefined until the first render, so the first load doesn't replay the wipe
+
+  const ordinal = (n) => {
+    const s = ["th", "st", "nd", "rd"], v = n % 100;
+    return n + (s[(v - 20) % 10] || s[v] || s[0]);
+  };
+  const plural = (n, one, many) => n + " " + (n === 1 ? one : many);
+
+  // A small line icon. h() makes HTML elements, and SVG needs its own namespace.
+  function icon(d) {
+    const ns = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(ns, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "2");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
+    svg.setAttribute("aria-hidden", "true");
+    const path = document.createElementNS(ns, "path");
+    path.setAttribute("d", d);
+    svg.append(path);
+    return svg;
+  }
+
+  // Singers take turns in rotation order, starting from whoever is up next. Singers with nothing queued are skipped.
+  function turnOrder(state) {
+    const ready = state.rotation.filter((s) => s.queued > 0);
+    if (!state.up_next) return ready;
+    const i = ready.findIndex((s) => s.name === state.up_next.singer);
+    return i < 0 ? ready : ready.slice(i).concat(ready.slice(0, i));
+  }
+
+  // Serialise refreshes: a push that lands mid-fetch just asks for one more round.
+  let busy = false, again = false;
+  async function refresh() {
+    if (busy) { again = true; return; }
+    busy = true;
+    try {
+      do { again = false; await load(); } while (again);
+    } catch (e) {
+      flash(e.message);
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function load() {
+    let state;
+    try {
+      state = await api("GET", "/rooms/" + code);
+    } catch (e) {
+      if (e.status === 404) {
+        document.querySelector("main").replaceChildren(h("section", { class: "lost" },
+          h("h1", {}, "No room called " + code),
+          h("p", { class: "muted" }, "Check the code on the big screen and try again."),
+          h("a", { class: "button", href: "/" }, "Enter another code")));
+        return;
+      }
+      throw e;
+    }
+    lastState = state;
+    document.title = state.name + " | KaraQueue";
+    $("room-name").textContent = state.name;
+    $("room-code").textContent = state.code;
+
+    await claimFromLink();
+    const saved = keys.get(code);
+    me = null;
+    if (saved) {
+      try { me = await api("GET", "/rooms/" + code + "/me"); }
+      catch (e) { if (e.status === 401) keys.drop(code); else throw e; }
+    }
+    if (me && me.role === "host" && new URLSearchParams(location.search).get("guest") !== "1") { location.href = "/r/" + code + "/host"; return; }
+
+    if (me && me.role === "host") {
+      me = null;
+      $("join-card").hidden = true;
+      $("whoami").textContent = "You're previewing the guest experience. Join from another browser to sing.";
+      $("whoami").hidden = false;
+    } else $("join-card").hidden = !!me;
+    const acct = account.get();
+    $("join").hidden = !!acct;
+    $("account-box").hidden = !!acct;
+    $("account-join").hidden = !acct;
+    if (acct) $("join-account").textContent = "Join as " + acct.name;
+    $("move").hidden = !me;
+    $("tie-box").hidden = !me || me.account;
+    $("guest-nav").hidden = !me;
+    $("turn").hidden = !me;
+    $("request-card").hidden = !me;
+    $("mine-card").hidden = !me;
+    $("paused").hidden = !state.paused;
+    $("request").hidden = state.paused;
+    applySearch();
+    const who = $("whoami");
+    who.hidden = !me && !(saved && saved.role === "host");
+    if (me) who.textContent = "You're signed in as " + me.name + " on this device.";
+
+    renderNow(state);
+    if (me) { renderTurn(state); renderMine(); $("my-song-count").textContent = me.songs.length; }
+    renderOrder(state);
+    firstLoad = false;
+    renderTakes();
+  }
+
+  // ---- Your recordings: when the host records a screen, each of your songs lands here. ----
+  async function renderTakes() {
+    const takes = me && recordings ? await api("GET", "/rooms/" + code + "/recordings").catch(() => []) : [];
+    $("takes-card").hidden = !takes.length;
+    const clock = new Intl.DateTimeFormat([], { hour: "numeric", minute: "2-digit" });
+    show("takes", takes.map((t) => h("li", {},
+      h("span", { class: "grow" }, h("span", { class: "title" }, t.title),
+        h("span", { class: "artist" }, (t.artist ? t.artist + ", " : "") + clock.format(new Date(t.created_at * 1000)) + ", " + megabytes(t.size))),
+      h("button", { class: "ghost small", onclick: act(() => download(t)) }, "Save"),
+      h("button", { class: "quiet icon remove", "aria-label": "Delete the recording of " + t.title, onclick: act(() => dropTake(t)) },
+        icon("M6 6l12 12M18 6L6 18")))));
+  }
+
+  const megabytes = (bytes) => (bytes / 1048576).toFixed(bytes < 10485760 ? 1 : 0) + " MB";
+
+  // The file needs your key, so fetch it and hand the browser a local copy to save.
+  async function download(take) {
+    const res = await fetch("/api/rooms/" + code + "/recordings/" + take.id + "/file",
+      { headers: { Authorization: "Bearer " + keys.get(code).token } });
+    if (!res.ok) throw new Error("Couldn't get that recording. Try again in a moment.");
+    const name = (res.headers.get("content-disposition") || "").match(/filename="?([^";]+)"?/);
+    const url = URL.createObjectURL(await res.blob());
+    const a = h("a", { href: url, download: name ? decodeURIComponent(name[1]) : take.title });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+
+  async function dropTake(take) {
+    if (!confirm("Delete your recording of " + take.title + "? There's no getting it back.")) return;
+    await api("DELETE", "/rooms/" + code + "/recordings/" + take.id);
+    flash("Deleted", "ok");
+  }
+
+  function renderNow(state) {
+    const np = state.now_playing;
+    const key = np ? "song" + np.id : state.up_next ? "wait:" + state.up_next.singer : "idle";
+    if (key === nowKey) return;
+    const fresh = nowKey !== undefined && np;
+    nowKey = key;
+    if (!np) {
+      show("now", h("p", { class: "muted" }, state.up_next
+        ? "Waiting for the host to start the next song. " + state.up_next.singer + " is up next."
+        : "Nobody's singing yet."));
+      return;
+    }
+    const singer = wipeText("div", "singer" + (fresh ? "" : " sung"), np.singer);
+    show("now", h("div", { class: "now" }, singer,
+      h("div", { class: "song" }, h("strong", {}, np.title), h("span", { class: "by" }, np.artist ? " by " + np.artist : ""))));
+    if (fresh) {
+      singer.getBoundingClientRect();           // commit the unsung state, then let the fill run
+      requestAnimationFrame(() => singer.classList.add("sung"));
+    }
+  }
+
+  function describeTurn(state) {
+    const np = state.now_playing;
+    const order = turnOrder(state);
+    const spot = order.findIndex((s) => s.id === me.id);
+    const first = me.songs[0];
+    if (np && np.singer === me.name) {
+      return { mood: "sing", title: "You're singing now!", sub: "Go give them a show." };
+    }
+    if (!me.songs.length) {
+      return { mood: "idle", title: "You're not in line yet", sub: "Request a song and you'll get a turn." };
+    }
+    if (spot < 0) {
+      return { mood: "hold", title: "Your turn is on hold", sub: "The host has taken you out of the order. Ask them if that's a mistake." };
+    }
+    if (spot === 0) {
+      return { mood: "up", title: "You're up next!", sub: "Get ready to sing " + first.title + "." };
+    }
+    return { mood: "wait", title: "You're " + ordinal(spot + 1) + " in line",
+      sub: plural(spot, "singer goes", "singers go") + " before you. Your first song is " + first.title + "." };
+  }
+
+  function renderTurn(state) {
+    const el = $("turn");
+    const t = describeTurn(state);
+    const sig = t.title + "|" + t.sub;
+    if (el.dataset.sig === sig) return;
+    const changed = el.dataset.mood !== undefined && el.dataset.mood !== t.mood;
+    el.dataset.sig = sig;
+    el.dataset.mood = t.mood;
+    el.className = "turn" + (t.mood === "up" || t.mood === "sing" ? " live" : "");
+    el.replaceChildren(h("h2", {}, t.title), h("p", {}, t.sub));
+    if (changed && (t.mood === "up" || t.mood === "sing")) {
+      el.getBoundingClientRect();
+      el.classList.add("pop");
+      if (navigator.vibrate) navigator.vibrate([70, 50, 70]);
+    }
+  }
+
+  function renderMine() {
+    const rows = me.songs.map((song, i) => {
+      const fresh = !firstLoad && !seenSongs.has(song.id);
+      seenSongs.add(song.id);
+      const cls = fresh ? "added" : song.id === movedId ? "moved" : null;
+      return h("li", { class: cls },
+        h("span", { class: "n" }, i + 1),
+        h("span", { class: "grow" }, h("span", { class: "title" }, song.title), h("span", { class: "artist" }, song.artist)),
+        h("button", { class: "ghost icon", "aria-label": "Move " + song.title + " up", disabled: i === 0, onclick: act(() => move(i, -1)) }, h("span", { class: "chev up" })),
+        h("button", { class: "ghost icon", "aria-label": "Move " + song.title + " down", disabled: i === me.songs.length - 1, onclick: act(() => move(i, 1)) }, h("span", { class: "chev down" })),
+        h("button", { class: "quiet icon remove", "aria-label": "Remove " + song.title, onclick: act(() => remove(song)) }, icon("M6 6l12 12M18 6L6 18")));
+    });
+    movedId = null;
+    show("mine", rows.length ? rows : h("li", { class: "muted" }, "Your setlist starts here. Tap Add a song to find your first track."));
+  }
+
+  function renderOrder(state) {
+    const order = turnOrder(state);
+    const np = state.now_playing;
+    const idle = state.rotation.filter((s) => !order.includes(s));
+    const mine = (s) => (me && s.id === me.id ? "me" : null);
+    const rows = order.map((s, i) => h("li", { class: mine(s) },
+      h("span", { class: "n" }, i + 1),
+      h("span", { class: "grow" }, s.name),
+      h("span", { class: "count" }, plural(s.queued, "song", "songs"))));
+    for (const s of idle) {
+      rows.push(h("li", { class: [mine(s), "none"].filter(Boolean).join(" ") },
+        h("span", { class: "n" }),
+        h("span", { class: "grow" }, s.name),
+        np && np.singer === s.name ? h("span", { class: "count live" }, "Singing now") : h("span", { class: "count" }, "No songs yet")));
+    }
+    show("rotation", rows.length ? rows : h("li", { class: "muted" }, "Nobody has joined yet. Be the first!"));
+  }
+
+  async function move(i, by) {
+    const ids = me.songs.map((s) => s.id);
+    movedId = ids[i];
+    [ids[i], ids[i + by]] = [ids[i + by], ids[i]];
+    await api("PUT", "/rooms/" + code + "/singers/" + me.id + "/songs", { order: ids });
+    refresh();
+  }
+
+  async function remove(song) {
+    await api("DELETE", "/rooms/" + code + "/songs/" + song.id);
+    flash("Removed " + song.title, "ok");
+    refresh();
+  }
+
+  // An optional guest account, kept on this device, that finds your spot in any room.
+  const account = {
+    get: () => { try { return JSON.parse(localStorage.getItem("kq:guest") || "null"); } catch (_) { return null; } },
+    set: (value) => localStorage.setItem("kq:guest", JSON.stringify(value)),
+    drop: () => localStorage.removeItem("kq:guest"),
+  };
+
+  async function joinWithAccount() {
+    try {
+      const res = await api("POST", "/rooms/" + code + "/singers", { guest: account.get().token });
+      keys.set(code, { role: "singer", token: res.token });
+    } catch (e) {
+      if (e.status === 401) account.drop();
+      throw e;
+    } finally {
+      await refresh();
+    }
+  }
+
+  $("join-account").onclick = act(joinWithAccount);
+  // One sign-in form, shown either before joining or, once in, to tie this spot to an account.
+  for (const box of [$("account-box"), $("tie-box")]) box.addEventListener("toggle", () => { if (box.open) box.append($("account")); });
+
+  $("account-out").onclick = act(async () => {
+    const acct = account.get();
+    account.drop();
+    if (acct) fetch("/api/guests/me", { method: "DELETE", headers: { Authorization: "Bearer " + acct.token } }).catch(() => {});
+    await refresh();
+  });
+
+  $("account").onsubmit = act(async (e) => {
+    e.preventDefault();
+    const making = e.submitter && e.submitter.name === "up";
+    const res = await api("POST", making ? "/guests" : "/guests/login",
+      { name: $("account-name").value, password: $("account-pass").value });
+    account.set({ token: res.token, name: res.name });
+    $("account-pass").value = "";
+    const tying = !!me;
+    await joinWithAccount();
+    if (tying) flash("Your spot is tied to " + res.name + " now", "ok");
+  });
+
+  // A "this is me" link from the host or your other phone: sign this phone in as that singer.
+  async function claimFromLink() {
+    const claim = new URLSearchParams(location.hash.slice(1)).get("claim");
+    if (!claim) return;
+    history.replaceState(null, "", location.pathname + location.search);
+    const saved = keys.get(code);
+    if (saved && saved.role === "host") {
+      flash("This browser is hosting the room. Open that link on the singer's phone.");
+      return;
+    }
+    if (saved) {
+      const now = await api("GET", "/rooms/" + code + "/me").catch(() => null);
+      if (now && now.name && !confirm("This phone is in the room as " + now.name + ". Switch it to the singer on this link?")) return;
+    }
+    try {
+      const res = await api("POST", "/rooms/" + code + "/claim", { claim });
+      keys.set(code, { role: "singer", token: res.token });
+      flash("You're in as " + res.name, "ok");
+    } catch (e) {
+      flash(e.message);
+    }
+  }
+
+  $("move-phone").onclick = act(async () => {
+    const box = $("move-box");
+    if (!box.hidden) { box.hidden = true; return; }
+    const res = await api("POST", "/rooms/" + code + "/singers/" + me.id + "/link");
+    const copy = h("button", { type: "button", class: "ghost small", onclick: act(async () => {
+      await navigator.clipboard.writeText(res.link);
+      flash("Copied. It works once, for " + res.minutes + " minutes.", "ok");
+    }) }, "Copy link");
+    const qr = h("div", { class: "move-qr", role: "img", "aria-label": "QR code to sign another phone in as you" });
+    qr.innerHTML = res.qr_svg; // Server-generated QR markup.
+    show("move-box", [h("p", { class: "muted small" }, "Scan this with the other phone. It works once, for " + res.minutes + " minutes, and this phone stays signed in too."), qr, copy]);
+    box.hidden = false;
+  });
+
+  $("join").onsubmit = act(async (e) => {
+    e.preventDefault();
+    const button = e.target.querySelector("button");
+    button.disabled = true;
+    try {
+      const res = await api("POST", "/rooms/" + code + "/singers", { name: $("name").value });
+      keys.set(code, { role: "singer", token: res.token });
+      await refresh();
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $("request").onsubmit = act(async (e) => {
+    e.preventDefault();
+    const button = e.target.querySelector("button");
+    const title = $("title"), artist = $("artist"), video = $("video");
+    button.disabled = true;
+    try {
+      await api("POST", "/rooms/" + code + "/songs", { title: title.value, artist: artist.value, video: video.value, media: pickedMedia });
+    } finally {
+      button.disabled = false;
+    }
+    flash("Added " + title.value, "ok");
+    setGuestView("songs", true);
+    title.value = artist.value = video.value = "";
+    pickedMedia = null;
+    show("results");
+    refresh();
+  });
+
+  fetch("/api/config").then((r) => r.json()).then((cfg) => {
+    server = { youtube: !!cfg.youtube_search, library: !!cfg.library };
+    recordings = !!cfg.recordings;
+    if (recordings) renderTakes();
+    applySearch();
+  }).catch(() => {});
+
+  // Search shows what the server has set up and the host allows in this room.
+  function applySearch() {
+    const allowed = (lastState && lastState.options) || { youtube: true, library: true };
+    youtube = server.youtube && allowed.youtube;
+    library = server.library && allowed.library;
+    const paused = lastState ? lastState.paused : false;
+    $("search").hidden = paused || !(youtube || library);
+    $("manual-hint").hidden = paused || !(youtube || library);
+    $("video").hidden = !allowed.youtube;
+    $("video-label").hidden = !allowed.youtube;
+    $("q").placeholder = library && youtube ? "Search for a song" : library ? "Search the song library" : "Search YouTube for a karaoke video";
+  }
+
+  // Library songs play from the server itself, so they come first.
+  // If YouTube doesn't answer, library results still show, with a note saying so.
+  async function findSongs(q) {
+    const path = "/rooms/" + code;
+    let skipped = false;
+    const [local, online] = await Promise.all([
+      library ? api("GET", path + "/library?q=" + encodeURIComponent(q)) : [],
+      youtube ? api("GET", path + "/search?q=" + encodeURIComponent(q)).catch((e) => {
+        if (!library) throw e;
+        skipped = true;
+        return [];
+      }) : [],
+    ]);
+    return { results: local.map((r) => ({ ...r, media: r.id })).concat(online), skipped };
+  }
+
+  $("search").onsubmit = act(async (e) => {
+    e.preventDefault();
+    const button = e.target.querySelector("button");
+    button.disabled = true;
+    button.textContent = "Searching";
+    let results, skipped;
+    try {
+      ({ results, skipped } = await findSongs($("q").value));
+    } finally {
+      button.disabled = false;
+      button.textContent = "Search";
+    }
+    show("results", skipped ? h("li", { class: "empty muted" }, "YouTube search didn't answer, so these are only songs from the library.") : null,
+      results.length ? results.map((r, i) => h("li", { style: "--i:" + Math.min(i, 6) },
+      h("button", { type: "button", class: "result", onclick: () => pick(r) },
+        r.media ? h("span", { class: "local", "aria-hidden": "true" }, icon("M9 18V5l11-2v13M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM20 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"))
+          : r.thumbnail ? h("img", { src: r.thumbnail, alt: "", width: 72, height: 54 }) : null,
+        h("span", { class: "grow" }, h("span", { class: "t" }, r.title),
+          h("span", { class: "c" }, r.media ? (r.artist ? r.artist + ", from" : "From") + " the song library" : r.channel)))))
+      : h("li", { class: "empty muted" }, "Nothing found. Try fewer words or just the song name."));
+  });
+
+  // Karaoke uploads are usually titled "Artist - Song (Karaoke Version)", so take a guess.
+  function pick(result) {
+    if (result.media) {
+      $("title").value = result.title;
+      $("artist").value = result.artist;
+      $("video").value = "";
+      pickedMedia = result.media;
+    } else {
+      pickYouTube(result);
+    }
+    show("results");
+    // Check the guess, fix it if needed, then tap Add. Don't pop the keyboard open for them.
+    const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    $("request").scrollIntoView({ block: "center", behavior: calm ? "auto" : "smooth" });
+    $("request").querySelector("button").focus({ preventScroll: true });
+  }
+
+  function pickYouTube(result) {
+    pickedMedia = null;
+    const guess = guessSong(result.title);
+    $("artist").value = guess.artist;
+    $("title").value = guess.title;
+    $("video").value = result.video_id;
+  }
+
+  // Typing a YouTube link means they want that instead of the library file they picked.
+  $("video").addEventListener("input", () => { pickedMedia = null; });
+
+  function setGuestView(view, focus = false) {
+    document.body.dataset.guestView = view;
+    if (focus) {
+      const heading = $(view === "songs" ? "mine-card" : view === "request" ? "request-card" : "order-card").querySelector("h2");
+      heading.tabIndex = -1;
+      heading.focus({ preventScroll: true });
+    }
+    document.querySelectorAll("[data-guest-view]").forEach(button => {
+      if (button.tagName !== "BUTTON") return;
+      if (button.dataset.guestView === view) button.setAttribute("aria-current", "page");
+      else button.removeAttribute("aria-current");
+    });
+  }
+  document.querySelectorAll("button[data-guest-view]").forEach(button => button.onclick = () => setGuestView(button.dataset.guestView));
+  live(refresh);
+</script>
+</body>
+</html>

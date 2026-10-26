@@ -1,0 +1,125 @@
+
+    /* The shared form rule sets display:grid, which would beat the hidden attribute. */
+    [hidden] { display: none !important; }
+    #flash { width: max-content; }
+    .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+    main.room { max-width: 34rem; padding: .5rem 1rem 4rem; display: flex; flex-direction: column; gap: 2rem; }
+    main.room > section { margin: 0; }
+
+    /* Header: whose room this is, and the code a friend can type. */
+    .top { display: flex; align-items: center; gap: .75rem; min-height: 3.5rem; }
+    .top .home { display: grid; place-items: center; width: 2.75rem; height: 2.75rem; margin-left: -.6rem; color: var(--muted); border-radius: 50%; flex: none; }
+    .top .home:hover { color: var(--text); }
+    .top .home svg { width: 1.375rem; height: 1.375rem; }
+    .top h1 { flex: 1; min-width: 0; margin: 0; font-size: var(--fs-title); font-weight: 600; line-height: 1.15; letter-spacing: -0.015em; overflow-wrap: anywhere; }
+    .roomcode { text-align: right; line-height: 1.1; flex: none; }
+    .roomcode .code { display: block; font-size: 1.5rem; }
+
+    /* Thumb-sized controls everywhere on this page. */
+    input, button { min-height: 3rem; }
+    button.icon { min-height: 0; }
+    .panel { padding: 1.25rem; }
+    h2 { margin-bottom: .85rem; }
+
+    /* When am I up. The answer they opened the page for, so it is the biggest thing here. */
+    .turn { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-card); padding: 1.35rem 1.35rem 1.5rem; }
+    .turn h2 { margin: 0 0 .5rem; font-size: clamp(2.25rem, 11vw, 3rem); font-weight: 700; font-stretch: 90%; line-height: .98; letter-spacing: -0.035em; text-wrap: balance; }
+    .turn p { margin: 0; color: var(--muted); font-size: 1.0625rem; text-wrap: pretty; }
+    /* Up next or on stage: it's live, so it takes the accent. */
+    .turn.live { background: var(--pill-accent-bg); }
+    .turn.live { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+    .turn.live h2 { color: var(--accent); }
+    .turn.live p { color: var(--text); }
+
+    /* Who's on stage right now. The name gets the karaoke fill when a new singer starts. */
+    #now-card h2 { font-family: var(--body); font-size: var(--fs-small); font-weight: 400; color: var(--muted); letter-spacing: 0; margin-bottom: .2rem; }
+    .now .singer { width: fit-content; max-width: 100%; overflow-wrap: anywhere; font-size: clamp(2.5rem, 12vw, 3.25rem); }
+    .now .song { margin-top: .4rem; font-size: 1.0625rem; }
+    #now > p { margin: 0; font-size: 1.0625rem; }
+
+    /* Request a song */
+    .request form + form, .request .hint { margin-top: 1.25rem; }
+    .request .hint { margin-bottom: 0; }
+    .request .row { flex-wrap: nowrap; }
+    .request #request { gap: .5rem; }
+    .request #request button { margin-top: .25rem; }
+    .paused { background: var(--raised); border: 1px solid var(--line); border-radius: 14px; padding: .9rem 1rem; margin: 0; }
+    #results { margin-top: .5rem; display: grid; gap: .25rem; }
+    #results li { padding: 0; }
+    .result {
+      width: 100%; min-height: 4.25rem; padding: .45rem; gap: .85rem; justify-content: flex-start;
+      text-align: left; font-weight: 400; background: transparent; color: var(--text); border-radius: 14px;
+    }
+    .result:hover { background: var(--raised); }
+    .result img, .result .local { width: 4.5rem; height: 3.375rem; flex: none; border-radius: 10px; background: var(--raised); }
+    .result img { object-fit: cover; }
+    .result .local { display: grid; place-items: center; color: var(--muted); }
+    .result .local svg { width: 1.375rem; height: 1.375rem; }
+    .result .grow { display: block; }
+    .result .t { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.3; font-weight: 600; }
+    .result .c { display: block; color: var(--muted); font-size: var(--fs-small); margin-top: .1rem; }
+    #results .empty { padding: .75rem .45rem; }
+
+    /* Lists of songs and singers. Numbers because the order is the point. */
+    .list li { min-height: 3.5rem; }
+    .list .n { flex: none; width: 1.5rem; font-weight: 600; color: var(--muted); text-align: center; font-variant-numeric: tabular-nums; }
+    .list .title { font-weight: 600; display: block; }
+    .list .artist { color: var(--muted); font-size: var(--fs-body); display: block; }
+    .songs { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-card); padding: .35rem .75rem; }
+    .songs li { padding-block: .5rem; gap: .35rem; }
+    .songs li + li { margin-top: 0; }
+    .songs li.muted { padding: .9rem .25rem; }
+    .songs .grow { margin-right: .25rem; }
+    .songs button.icon { width: 2.75rem; height: 2.75rem; flex: none; }
+    .songs .remove { color: var(--negative); }
+    .songs .remove:hover { color: var(--negative); background: var(--pill-negative-bg); }
+    .songs .remove svg { width: 1.125rem; height: 1.125rem; }
+    .chev { display: block; width: .6rem; height: .6rem; }
+    .chev::before { content: ""; display: block; box-sizing: border-box; width: .6rem; height: .6rem; border: solid currentColor; border-width: 0 2px 2px 0; }
+    .chev.up::before { transform: translateY(3px) rotate(-135deg); }
+    .chev.down::before { transform: translateY(-3px) rotate(45deg); }
+    /* You, in the singer order: a step up in tone so you can find yourself at a glance. */
+    .order li { min-height: 3rem; padding: .5rem .75rem; margin-inline: -.75rem; border-radius: 14px; }
+    .order li.me { background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
+    .order li.me .n { color: var(--text); }
+    .order li.none { opacity: .55; }
+    .order .count { color: var(--muted); font-size: var(--fs-body); font-weight: 400; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .order .count.live { color: var(--accent); opacity: 1; }
+    #whoami { margin: 0; }
+
+    .lost { padding-top: 18vh; }
+    .lost h1 { font-size: clamp(2.25rem, 11vw, 3rem); font-stretch: 90%; line-height: 1; letter-spacing: -0.035em; margin-bottom: .75rem; overflow-wrap: anywhere; }
+    .lost p { font-size: 1.0625rem; margin-bottom: 1.75rem; }
+    .lost .button { min-height: 3rem; padding-inline: 1.5rem; }
+
+    @media (prefers-reduced-motion: no-preference) {
+      .added, #results li { animation: rise 240ms var(--ease-out) backwards; }
+      #results li { animation-delay: calc(var(--i, 0) * 40ms); }
+      .moved { animation: moved 500ms var(--ease) backwards; }
+      .turn.pop { animation: pop 380ms var(--ease-out); }
+      @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
+      @keyframes moved { from { opacity: .35; transform: translateY(4px); } }
+      @keyframes pop { from { transform: scale(.96); opacity: .4; } }
+    }
+
+.guest-brand { max-width: 780px; margin: auto; padding: 1.25rem 1.5rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }.guest-brand .wordmark { font-size: 1.2rem; }
+main.room { max-width: 780px; padding: .5rem 1.5rem 5rem; gap: 1.5rem; }
+.top { padding-bottom: 1.25rem; border-bottom: 1px solid var(--line); }.top h1 { font-size: 1.65rem; font-weight: 700; }.roomcode { padding-left: 1rem; }.roomcode .code { font-size: 1.65rem; letter-spacing: .12em; }.top .home { display: none; }
+.guest-meta { display: flex; justify-content: space-between; color: var(--faint); font-size: .75rem; margin-top: -.5rem; }
+.guest-nav { display: flex; padding: 5px; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+.guest-nav button { flex: 1; padding: .5rem; font-size: .875rem; background: transparent; color: var(--muted); border-radius: 10px; min-height: 2.75rem; }.guest-nav button[aria-current] { background: var(--pill-accent-bg); color: var(--accent); }
+#my-song-count { font-size: .7rem; background: var(--raised); border-radius: 50%; padding: .1rem .35rem; }
+.turn { background: linear-gradient(110deg, var(--pill-accent-bg), var(--surface)); padding: 1.5rem; }.turn h2 { font-size: clamp(1.9rem, 7vw, 2.75rem); line-height: 1.08; }.turn p { font-size: .9375rem; max-width: 38rem; line-height: 1.65; }
+#now-card { padding: 1.5rem; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); }#now-card h2 { margin-bottom: .75rem; }#now-card h2::before { content: ""; display: inline-block; width: 6px; height: 6px; background: var(--accent); border-radius: 50%; margin-right: .5rem; }.now .singer { font-size: 2.5rem; }.now .song { font-size: 1rem; }
+#join-card { padding: 2.25rem; text-align: center; }#join-card h2 { font-size: 2.5rem; letter-spacing: -.04em; margin-bottom: .75rem; }#join-card > p { max-width: 26rem; margin-inline: auto; }#join-card form { max-width: 24rem; margin: 1.5rem auto 0; text-align: left; gap: .65rem; }#join-card form label { color: var(--muted); font-size: .8125rem; }#join-card button { margin-top: .35rem; }
+.welcome-mark { width: 64px; height: 64px; display: grid; place-items: center; border-radius: 50%; background: var(--pill-accent-bg); color: var(--accent); margin: 0 auto 1.25rem; }.welcome-mark svg { width: 28px; height: 28px; }
+#request-card { padding: 1.75rem; }#request-card h2 { font-size: 1.75rem; max-width: 20ch; letter-spacing: -.035em; margin-bottom: .6rem; }.request #request { margin-top: 1rem; gap: .4rem; }.request #request label { font-size: .8125rem; color: var(--muted); margin-top: .5rem; }.request #request button { margin-top: 1rem; }.request .hint { font-size: .8125rem; }.request form + form { margin-top: 1rem; }
+.order li { margin: 0; border-radius: 10px; padding: .85rem; }.order li + li { border-top: 1px solid var(--rule); }.order li.me { background: var(--pill-accent-bg); box-shadow: none; }.order li.me .n { color: var(--accent); }.order li.none { opacity: 1; color: var(--muted); }
+.songs { padding: .25rem 1rem; }.songs li { min-height: 4.5rem; }.songs li + li { border-top: 1px solid var(--rule); }.songs .title { font-size: .9375rem; }.songs .artist { font-size: .8125rem; }
+body[data-guest-view="queue"] #request-card, body[data-guest-view="queue"] #mine-card, body[data-guest-view="queue"] #takes-card,
+body[data-guest-view="songs"] #request-card, body[data-guest-view="songs"] #now-card, body[data-guest-view="songs"] #order-card,
+body[data-guest-view="request"] #mine-card, body[data-guest-view="request"] #takes-card, body[data-guest-view="request"] #now-card, body[data-guest-view="request"] #order-card { display: none; }
+@media (max-width: 500px) { .guest-brand { padding: 1rem; }main.room { padding-inline: 1rem; gap: 1.25rem; }.guest-brand .wordmark { font-size: 1.125rem; }.theme-picker svg { display: none; }.top h1 { font-size: 1.35rem; }.guest-nav button { font-size: .8125rem; }.turn { padding: 1.25rem; }#join-card { padding: 1.75rem 1.25rem; }#request-card { padding: 1.25rem; }.songs { padding-inline: .65rem; }.songs button.icon { width: 2.5rem; height: 2.75rem; }.songs .n { width: 1rem; }.songs li { gap: .15rem; } }
+details.account { margin-top: 1.25rem; border-top: 1px solid var(--rule); padding-top: 1rem; }details.account summary { cursor: pointer; font-weight: 600; }details.account form { margin-top: .75rem; }
+#account-join > button { width: 100%; }#move { text-align: center; }#move-box p { margin-top: .75rem; }#tie-box { text-align: left; }

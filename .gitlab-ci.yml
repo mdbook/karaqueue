@@ -1,0 +1,38 @@
+# Tests on every push and merge request; a container image in this project's registry for
+# every branch. Nothing here deploys anything.
+
+stages:
+  - test
+  - build
+
+test:
+  stage: test
+  image: python:3.12-slim
+  script:
+    - pip install --no-cache-dir -q '.[dev]'
+    - pytest -q
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+
+# Tagged with the branch name and the commit; the default branch also gets "latest".
+container:
+  stage: build
+  image:
+    name: gcr.io/kaniko-project/executor:v1.23.2-debug
+    entrypoint: [""]
+  script:
+    - mkdir -p /kaniko/.docker
+    - printf '{"auths":{"%s":{"username":"%s","password":"%s"}}}' "$CI_REGISTRY" "$CI_REGISTRY_USER" "$CI_REGISTRY_PASSWORD" > /kaniko/.docker/config.json
+    - EXTRA=""
+    - if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then EXTRA="--destination $CI_REGISTRY_IMAGE:latest"; fi
+    - >
+      /kaniko/executor
+      --context "$CI_PROJECT_DIR"
+      --dockerfile "$CI_PROJECT_DIR/Dockerfile"
+      --destination "$CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG"
+      --destination "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
+      $EXTRA
+      --cleanup
+  rules:
+    - if: $CI_COMMIT_BRANCH && $CI_REGISTRY

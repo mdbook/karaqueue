@@ -1,0 +1,538 @@
+[hidden] { display: none !important; }
+
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap;
+}
+
+main.host {
+  --label-w: 6.5rem;
+  --line-h: 2.75rem;
+  max-width: 78rem;
+  padding: 0 1rem 3rem;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  padding: var(--pad);
+}
+
+/* ---- Top bar: wordmark, the room, and the co-host link. Nothing else. ---- */
+.masthead {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "mark copy" "name room";
+  align-items: center;
+  gap: .25rem 1rem;
+  padding-block: .75rem 1.5rem;
+}
+.wordmark {
+  grid-area: mark;
+  justify-self: start;
+  font-family: var(--display); font-weight: 700; font-size: var(--fs-title); letter-spacing: -0.02em;
+  color: var(--text); text-decoration: none;
+}
+.masthead h1 {
+  grid-area: name;
+  margin: 0;
+  font-size: clamp(1.5rem, 5vw, 1.75rem); font-weight: 600; line-height: 1.15; letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+.masthead .room { grid-area: room; display: flex; align-items: baseline; gap: .5rem; }
+.masthead .room .code { font-size: 1.75rem; line-height: 1; }
+#copy-host { grid-area: copy; }
+@media (min-width: 760px) {
+  .masthead {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-areas: "mark name room copy";
+    gap: 1.5rem;
+    min-height: 4.5rem;
+    padding-block: .75rem;
+    margin-bottom: 1rem;
+  }
+  .masthead h1 { font-size: var(--fs-title); color: var(--muted); }
+}
+
+/* ---- Board: the show and its screens on the left, the people on the right. ---- */
+.board { display: grid; gap: 2.5rem; }
+.col { min-width: 0; }
+.col > section + section { margin-top: 2.5rem; }
+@media (min-width: 1000px) {
+  main.host { padding: 0 2rem 4rem; }
+  .board { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 3rem; align-items: start; }
+}
+
+/* Every section heading looks the same: a title on the ground, a quiet aside on the right. */
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem 1rem; flex-wrap: wrap; margin-bottom: .85rem; min-height: 2.5rem; }
+.section-head h2 { margin: 0; }
+
+/* ---- The show: the stage of the night, so it gets the biggest type. ---- */
+.show { padding-top: 1.75rem; }
+.now-label { font-size: var(--fs-body); margin-bottom: .35rem; }
+.now-singer {
+  font-family: var(--display);
+  font-size: clamp(2.75rem, 8vw, 4.5rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.035em;
+  overflow-wrap: anywhere;
+  padding-bottom: .08em;
+}
+.now-singer.idle { font-size: clamp(2rem, 6vw, 2.75rem); color: var(--muted); letter-spacing: -0.025em; }
+.now-song { font-size: 1.25rem; margin-top: .5rem; overflow-wrap: anywhere; }
+.up-next { color: var(--muted); margin: 1.25rem 0 1.5rem; }
+.show-actions { display: flex; flex-wrap: wrap; gap: .75rem; }
+.show-actions button { min-height: 3.5rem; }
+button.next { flex: 2 1 14rem; font-size: 1.2rem; font-weight: 700; padding: 0 2rem; }
+.show-actions button.ghost { flex: 1 1 10rem; }
+/* Pressed toggles go one tone up, never a coloured ring. */
+button.ghost[aria-pressed="true"] { background: var(--control); }
+button.ghost[aria-pressed="true"]:hover { background: var(--control); }
+.paused-note { color: var(--warning); font-size: var(--fs-body); margin: 1rem 0 0; }
+.is-error { color: var(--warning); }
+#local-warning { overflow-wrap: anywhere; font-size: .8rem; line-height: 1.45; margin: 0 0 .75rem; }
+
+/* ---- Screens ---- */
+.screens { margin-top: 2.5rem; }
+.tv-list { display: grid; gap: 1rem; }
+.tv-tile { container-type: inline-size; padding-block: 1.1rem .4rem; }
+
+/* Card head: the little TV, the name and what it's doing, and its three quiet actions. */
+.tile-head {
+  display: grid;
+  grid-template-columns: var(--label-w) minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 1rem;
+  padding-bottom: 1rem;
+}
+.tile-title { min-width: 0; }
+.tv-name, .tv-name-input {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+.tv-name { display: block; transform-origin: left center; overflow-wrap: anywhere; }
+.tv-name-input {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  width: 100%;
+  min-height: 0;
+  padding: .05em .35em;
+  margin-left: -.36em;
+  border-radius: 8px;
+}
+.tile-status { display: flex; align-items: center; flex-wrap: wrap; gap: .25rem .9rem; margin-top: .15rem; font-size: var(--fs-small); }
+.tv-state, .rec-mark { display: inline-flex; align-items: center; gap: .4rem; color: var(--muted); font-weight: 600; }
+.tv-state::before, .rec-mark::before { content: ""; width: .5rem; height: .5rem; border-radius: 50%; background: var(--faint); }
+.tv-tile[data-state="playing"] .tv-state, .tv-tile[data-state="buffering"] .tv-state { color: var(--text); }
+.tv-tile[data-state="playing"] .tv-state::before, .tv-tile[data-state="buffering"] .tv-state::before { background: var(--accent); }
+.tv-tile[data-state="paused"] .tv-state::before { background: var(--text); }
+.rec-mark { color: var(--red); }
+.rec-mark::before { background: var(--red); }
+.tile-actions { display: flex; gap: .15rem; margin-right: -.6rem; }
+.host .tile-actions button.small { padding-inline: .6rem; }
+
+/* Where the sound comes from, above the screens. The host page's own sound screen is a tile with
+   no picture to arrange, and its player is a hidden frame (kept rendered so it keeps playing). */
+.sound-from { margin-bottom: 1rem; padding-block: 1rem; }
+.waiting { margin-bottom: 1rem; padding-block: 1rem; border-color: var(--accent); }
+.waiting[hidden] { display: none; }
+.waiting h3 { margin: 0 0 .25rem; }
+.waiting-list { list-style: none; margin: .75rem 0 0; padding: 0; display: grid; gap: .5rem; }
+.waiting-list li { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .75rem; }
+.waiting-name { flex: 1 1 8rem; min-width: 0; overflow-wrap: anywhere; }
+.waiting-code { font-family: var(--display); font-weight: 700; font-size: 1.4rem; letter-spacing: .12em; font-variant-numeric: tabular-nums; }
+.sound-from .segmented { flex-wrap: wrap; }
+.panel-tile .setting-layout, .panel-tile .tile-actions, .panel-tile .tv { display: none; }
+.panel-tile .tile-head { grid-template-columns: minmax(0, 1fr); }
+.elsewhere-note { padding-block: .85rem .6rem; border-top: 1px solid var(--rule); }
+.panel-sound { position: fixed; left: -10px; top: -10px; width: 1px; height: 1px; border: 0; opacity: 0; pointer-events: none; }
+
+/* Settings come in three small groups (picture, sound, mic), split by one hairline each. */
+.tile-group { display: grid; gap: .5rem; padding-block: .85rem; border-top: 1px solid var(--rule); }
+.setting { display: grid; grid-template-columns: var(--label-w) minmax(0, 1fr); column-gap: 1rem; align-items: start; }
+.setting-label { min-height: var(--line-h); display: flex; align-items: center; color: var(--muted); font-size: var(--fs-body); }
+.setting-body { display: grid; gap: .3rem; min-width: 0; }
+.setting-line { display: flex; align-items: center; gap: .5rem; min-height: var(--line-h); min-width: 0; }
+.setting-line > .row { flex-wrap: nowrap; gap: .5rem; }
+.setting-note { margin: 0 0 .2rem; color: var(--muted); font-size: var(--fs-small); line-height: 1.4; }
+.setting-value { color: var(--muted); font-size: var(--fs-body); padding-left: .25rem; }
+.rules { display: grid; gap: .75rem; --label-w: 8.5rem; }
+.rules > .setting-note { margin: .25rem 0 0; }
+.rules .limit { width: 5.5rem; min-height: var(--line-h); font-variant-numeric: tabular-nums; }
+.is-recording .setting-record .setting-value { color: var(--text); }
+
+.tv-time { color: var(--muted); font-size: var(--fs-body); font-variant-numeric: tabular-nums; padding-left: .25rem; }
+.vol-text { min-width: 3.25rem; text-align: right; color: var(--muted); font-size: var(--fs-body); font-variant-numeric: tabular-nums; }
+.setting select { min-height: var(--line-h); }
+
+/* Segmented choices fill their line, so their right edge meets the sliders'. Each choice grows
+   by the same amount from its own width, so longer names never have to wrap on a wide card. */
+.setting .segmented { display: flex; }
+.setting .segmented button { flex: 1 1 auto; padding-inline: .5rem; line-height: 1.15; text-align: center; }
+
+.ico { width: 1.25rem; height: 1.25rem; display: block; }
+button.icon .ico { width: 100%; height: 100%; }
+.setting button.icon { flex-shrink: 0; padding: .55rem; }
+/* The record button: an empty ring when off, a filled sunset-red dot when on. */
+.rec-btn[aria-pressed="true"] { color: var(--red); }
+.rec-btn .ico { transform: scale(.85); }
+
+/* Recording needs the mic, so on a screen with the mic off the whole row steps back. */
+.setting-record:has(.rec-btn:disabled) .setting-label,
+.setting-record:has(.rec-btn:disabled) .setting-value { color: var(--faint); }
+
+/* Volume: a flat track. The filled part is warm white, the rest a step up; muted or off, the fill
+   drops to --control so the level still shows but clearly isn't live. The thumb is big enough for
+   a thumb. Chrome and Safari have no "filled part" for a range, so the fill is a solid one-colour
+   SVG sized to --fill (set by the page). Its colours are written out because a data URL can't read
+   a custom property: #fff5ee is --text, #4d4038 is --control. Firefox draws the fill itself. */
+input.volume {
+  -webkit-appearance: none; appearance: none;
+  height: var(--line-h);
+  min-width: 4rem;
+  min-height: 0;
+  background: transparent;
+  cursor: pointer;
+}
+input.volume::-webkit-slider-runnable-track {
+  height: 6px; border-radius: 3px;
+  background: linear-gradient(to right, var(--accent) 0 var(--fill, 100%), var(--control) var(--fill, 100%) 100%);
+}
+input.volume.is-muted::-webkit-slider-runnable-track {
+  background: var(--control);
+}
+input.volume::-moz-range-track { height: 6px; border-radius: 3px; background: var(--raised); }
+input.volume::-moz-range-progress { height: 6px; border-radius: 3px; background: var(--accent); }
+input.volume.is-muted::-moz-range-progress { background: var(--control); }
+input.volume::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 22px; height: 22px; margin-top: -8px;
+  border-radius: 50%; border: 0;
+  background: var(--text);
+}
+input.volume::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; border: 0; background: var(--text); }
+input.volume:focus-visible { outline: none; }
+input.volume:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--text); outline-offset: 3px; }
+input.volume:focus-visible::-moz-range-thumb { outline: 2px solid var(--text); outline-offset: 3px; }
+
+/* Narrow cards (phones): the label sits just above its control instead of beside it. */
+@container (max-width: 31rem) {
+  .tile-head { grid-template-columns: 5rem minmax(0, 1fr); row-gap: .5rem; }
+  .tile-actions { grid-column: 1 / -1; margin: 0 0 0 -.6rem; flex-wrap: wrap; }
+  .setting .segmented button { flex-basis: 0; }
+  .setting { grid-template-columns: minmax(0, 1fr); }
+  .setting-label { min-height: 0; font-size: var(--fs-small); padding-top: .15rem; }
+  .tile-group { gap: .65rem; }
+  .setting .segmented.layouts button { min-height: 2.6rem; }
+}
+
+/* The TV: a flat bezel with a hairline, a dark screen, a power light in the chin and a little foot. */
+.tv {
+  position: relative;
+  width: 100%;
+  padding: .3rem .3rem .75rem;
+  margin-bottom: .35rem;
+  border-radius: 10px;
+  background: var(--raised);
+  border: 1px solid var(--line-strong);
+  outline: 2px solid transparent;
+  outline-offset: 3px;
+}
+.tv::after {
+  content: "";
+  position: absolute; left: 50%; bottom: -.4rem;
+  width: 30%; height: .3rem;
+  transform: translateX(-50%);
+  border-radius: 0 0 4px 4px;
+  background: var(--raised);
+}
+.tv-led {
+  position: absolute; left: 50%; bottom: .25rem;
+  width: 4px; height: 4px; border-radius: 50%;
+  transform: translateX(-50%);
+  background: var(--control);
+}
+.tv[data-state="playing"] .tv-led, .tv[data-state="buffering"] .tv-led { background: var(--accent); }
+.tv[data-state="paused"] .tv-led { background: var(--text); }
+
+.tv-screen {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--ground);
+}
+.tv-screen[data-state="idle"] .pict, .tv-screen[data-state="ended"] .pict { opacity: .45; }
+/* Nobody's being sung on an idle screen, so its name bar uses a neutral tone. */
+.tv-screen[data-state="idle"] .pict .line.big, .tv-screen[data-state="ended"] .pict .line.big { background: var(--muted); }
+
+.tv-progress { position: absolute; z-index: 2; left: 0; right: 0; bottom: 0; height: 3px; background: var(--raised); }
+.tv-progress span {
+  display: block; height: 100%;
+  background: var(--sunset);
+  transform: scaleX(0);
+  transform-origin: left;
+}
+.tv-screen[data-state="paused"] .tv-progress span { background: var(--text); }
+
+/* Layout pictures, drawn on the little TV. Percentages make them scale.
+   The singer's name uses the theme accent. */
+.pict { position: absolute; inset: 0; display: block; }
+.pict > span { position: absolute; display: block; border-radius: 1px; }
+.pict .video { left: 4%; top: 7%; width: 62%; height: 86%; background: var(--control); }
+.pict .video.full { inset: 0; width: auto; height: auto; border-radius: 0; }
+.pict .side { left: 69%; top: 7%; width: 27%; height: 86%; background: var(--surface); }
+.pict .line { height: 7%; background: var(--faint); }
+.pict .line.big { height: 13%; background: var(--accent); }
+.pict .play { left: 50%; top: 50%; width: 13%; aspect-ratio: 1; transform: translate(-40%, -50%); clip-path: polygon(0 0, 100% 50%, 0 100%); background: var(--text); border-radius: 0; }
+
+.pict-split .line { left: 72.5%; width: 20%; }
+.pict-split .line.a { top: 18%; background: var(--text); }
+.pict-split .line.b { top: 32%; width: 16%; }
+.pict-split .line.c { top: 46%; width: 18%; }
+
+.pict-queue .line { left: 8%; }
+.pict-queue .line.big { top: 12%; width: 52%; }
+.pict-queue .line.a { top: 35%; width: 72%; }
+.pict-queue .line.b { top: 49%; width: 60%; }
+.pict-queue .line.c { top: 63%; width: 66%; }
+.pict-queue .line.d { top: 77%; width: 48%; }
+
+/* A QR code, flat: a white square with two of its corner marks. */
+.pict-splash .qr { left: 9%; top: 18%; height: 64%; aspect-ratio: 1; background: var(--text); border-radius: 1px; }
+.pict-splash .qr::before, .pict-splash .qr::after { content: ""; position: absolute; width: 34%; height: 34%; background: var(--ground); }
+.pict-splash .qr::before { left: 12%; top: 12%; }
+.pict-splash .qr::after { right: 12%; bottom: 12%; }
+.pict-splash .line.big { left: 50%; top: 30%; width: 38%; }
+.pict-splash .line.a { left: 50%; top: 52%; width: 30%; }
+
+.pict-confidence .line { left: 50%; transform: translateX(-50%); }
+.pict-confidence .line.big { top: 28%; width: 64%; height: 12%; }
+.pict-confidence .line.a { top: 52%; width: 60%; height: 9%; background: var(--muted); }
+.pict-confidence .line.b { top: 68%; width: 44%; height: 9%; background: var(--control); }
+
+/* No screen yet: a dark, empty TV and the link that fills it. */
+.screens-empty { display: grid; gap: 1.5rem; align-items: center; }
+@media (min-width: 640px) { .screens-empty { grid-template-columns: minmax(0, 12rem) minmax(0, 1fr); } }
+.tv-ghost { max-width: 12rem; background: var(--surface); border-style: dashed; }
+.tv-ghost::after { background: var(--surface); }
+.empty-copy h3 { margin-bottom: .35rem; }
+.link-box {
+  margin: .25rem 0 .75rem;
+  padding: .65rem 1rem;
+  border-radius: 12px;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+/* style.css sizes button.small only; links styled as buttons need it too. */
+.button.small { padding: .35rem .75rem; font-size: var(--fs-small); }
+.add-another { margin: 1rem 0 0; padding-left: .25rem; }
+.add-another button { padding-left: 0; padding-right: 0; margin-left: .35rem; }
+.add-another .screen-url { color: var(--text); font-weight: 600; overflow-wrap: anywhere; }
+
+/* ---- Lists in cards (singers, recordings): rows split by a faint hairline. ---- */
+.list-card { padding-block: .35rem; container-type: inline-size; }
+.list-card .empty { margin: 1rem 0; }
+ol.singers > li.singer { display: block; padding: .8rem 0; }
+ol.singers > li.singer + li.singer, ol.recordings > li + li { border-top: 1px solid var(--rule); }
+
+/* Per-row tools are quiet icons: they're there when you look for them, not shouting. */
+.tools { display: flex; align-items: center; gap: .1rem; flex-shrink: 0; margin-right: -.4rem; }
+.tools button.quiet.icon { width: 2.25rem; height: 2.25rem; padding: .5rem; color: var(--faint); }
+.tools button.quiet.icon:hover:not(:disabled) { color: var(--text); background: var(--raised); }
+.tools button.quiet.icon:disabled { opacity: .25; }
+.tools button.quiet.icon.remove:hover:not(:disabled) { color: var(--negative); background: var(--pill-negative-bg); }
+
+.singer-head { display: flex; align-items: center; gap: .5rem .75rem; }
+.pos {
+  width: 1.5rem; flex-shrink: 0;
+  font-family: var(--display); font-weight: 700; font-size: 1.15rem;
+  color: var(--faint); font-variant-numeric: tabular-nums;
+}
+.singer-name { display: flex; align-items: center; flex-wrap: wrap; gap: .2rem .6rem; min-width: 0; }
+.singer-name .name { font-family: var(--display); font-weight: 700; font-size: 1.2rem; letter-spacing: -0.015em; overflow-wrap: anywhere; line-height: 1.2; }
+/* Status pills: a pale tint with ink of the same hue. Only the singer on stage gets the accent. */
+.tag { font-size: var(--fs-small); font-weight: 600; padding: .1rem .55rem; border-radius: 999px; }
+.tag.singing { color: var(--accent); background: var(--pill-accent-bg); }
+.tag.next-up { color: var(--text); background: var(--raised); }
+.tag.skipped { color: var(--muted); background: var(--raised); }
+li.singer.is-skipped .name, li.singer.is-skipped .songs { opacity: .55; }
+
+ol.songs { margin: .2rem 0 0 2.25rem; }
+ol.songs li { padding: .1rem 0; gap: .5rem; font-size: var(--fs-body); }
+ol.songs .grow { min-width: 0; }
+.no-songs { margin: .2rem 0 0 2.25rem; }
+
+/* The singer menu: the one other thing that floats, so it gets the toast's shadow. */
+.menu {
+  inset: auto;
+  margin: 0;
+  padding: .35rem;
+  min-width: 13rem;
+  max-width: calc(100vw - 16px);
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
+  background: var(--raised);
+  color: var(--text);
+  box-shadow: 0 12px 32px #0009;
+}
+.menu button {
+  display: flex; width: 100%; justify-content: flex-start;
+  background: transparent; color: var(--text); font-weight: 500;
+  border-radius: 10px; padding-inline: .85rem;
+}
+.menu button:hover { background: var(--control); }
+.menu button.danger-text { color: var(--negative); }
+.menu button.danger-text:hover { background: var(--pill-negative-bg); }
+
+/* Recordings */
+ol.recordings > li { padding: .75rem 0; gap: .75rem; }
+.rec-info { display: grid; gap: .1rem; }
+.recordings .tools { gap: .35rem; }
+
+/* ---- Add a song ---- */
+#add { gap: .85rem; }
+.field { display: grid; gap: .3rem; }
+.pair { display: grid; gap: .85rem; }
+@media (min-width: 560px) { .pair { grid-template-columns: 1fr 1fr; } }
+#add > button { justify-self: start; padding-inline: 1.6rem; min-height: 3rem; }
+#find-results { display: grid; gap: .25rem; }
+#find-results:empty { display: none; }
+#find-results .result {
+  display: flex; align-items: center; gap: .75rem; width: 100%; padding: .45rem; text-align: left;
+  background: transparent; color: inherit; border: 0; border-radius: 12px; min-height: 3rem; font-weight: 400;
+}
+#find-results .result:hover { background: var(--raised); }
+#find-results img, #find-results .local { width: 4.5rem; height: 3.375rem; flex: none; border-radius: 10px; object-fit: cover; background: var(--raised); }
+#find-results .local { display: grid; place-items: center; color: var(--muted); }
+#find-results .local svg { width: 1.375rem; height: 1.375rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+#find-results .grow { display: block; min-width: 0; }
+#find-results .t { display: block; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+#find-results .c { display: block; color: var(--muted); font-size: var(--fs-small); margin-top: .1rem; }
+#find-results .empty { padding: .75rem .45rem; }
+
+/* ---- Phone dock: Next song stays in reach once the show scrolls away. A plain opaque bar. ---- */
+.dock {
+  position: fixed; z-index: 40; left: 0; right: 0; bottom: 0;
+  display: flex; align-items: center; gap: .75rem;
+  padding: .7rem 1rem calc(.7rem + env(safe-area-inset-bottom));
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+}
+.dock-now { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dock-now strong { font-family: var(--display); }
+.dock button.next { flex: 0 0 auto; min-height: 3rem; font-size: 1.05rem; padding: 0 1.4rem; }
+body.docked main.host { padding-bottom: 6.5rem; }
+body.docked #flash { bottom: 5.5rem; }
+@media (min-width: 1000px) { .dock { display: none !important; } }
+
+@media (max-width: 520px) {
+  main.host { --pad: 16px; }
+  .tv-tile { padding-block: 1rem .25rem; }
+}
+
+/* Fingers need bigger targets than pointers. */
+@media (pointer: coarse) {
+  .host button.small, .host .button.small { min-height: 2.75rem; padding-inline: .9rem; }
+  .tools button.quiet.icon { width: 2.75rem; height: 2.75rem; padding: .7rem; }
+  .setting button.icon { width: var(--line-h); height: var(--line-h); }
+}
+
+/* ---- Motion: only in answer to something the host did. Transform and opacity only. ---- */
+@media (prefers-reduced-motion: no-preference) {
+  .tv-progress span { transition: transform 500ms linear; }
+  .tv-led, .tv-state::before { transition: background-color var(--standard) var(--ease); }
+  .pict.enter { animation: pict-in var(--standard) var(--ease-out); }
+  .tv-tile.arrive { animation: arrive 360ms var(--ease-out); }
+  .tv-tile.identify .tv-name { animation: name-pop 1200ms var(--ease); }
+  .dock:not([hidden]) { animation: dock-in var(--standard) var(--ease-out); }
+  .menu:popover-open { animation: menu-in var(--quick) var(--ease-out); transform-origin: top right; }
+  @keyframes pict-in { from { opacity: 0; transform: scale(.94); } }
+  @keyframes arrive { from { opacity: 0; transform: translateY(12px) scale(.98); } }
+  @keyframes name-pop { 0%, 100% { transform: none; } 15%, 70% { transform: scale(1.05); } }
+  @keyframes dock-in { from { transform: translateY(100%); } }
+  @keyframes menu-in { from { opacity: 0; transform: scale(.96); } }
+}
+/* Identify rings the little TV in white while the real one shows its name. The JS waits for
+   this animation's end, so it runs with reduced motion too (it doesn't move, it just shows). */
+.tv-tile.identify .tv { animation: identify 1200ms var(--ease); }
+@keyframes identify { 0%, 100% { outline-color: transparent; } 12%, 70% { outline-color: var(--text); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .pict.enter, .menu:popover-open { animation: fade-in var(--quick) linear; }
+  @keyframes fade-in { from { opacity: 0; } }
+}
+
+/* Host workspace: navigation separates the live queue from setup controls. */
+.sidebar { position: fixed; inset: 0 auto 0 0; width: 224px; background: var(--surface); border-right: 1px solid var(--line); padding: 2rem 1.25rem; display: flex; flex-direction: column; z-index: 30; }
+.sidebar .wordmark { font-size: 1.3rem; gap: .4rem; }
+.sidebar-label { color: var(--faint); font-size: .75rem; margin: 3rem .75rem 1rem; }
+.host-nav { display: grid; gap: .4rem; }
+.host-nav button { justify-content: start; gap: .8rem; width: 100%; min-height: 3rem; padding: .7rem .85rem; background: transparent; color: var(--muted); font-size: .875rem; font-weight: 500; }
+.host-nav button:hover { background: var(--raised); color: var(--text); }
+.host-nav button[aria-current] { background: var(--pill-accent-bg); color: var(--accent); }
+.host-nav button { position: relative; }
+.host-nav button.has-waiting::after { content: ""; position: absolute; top: .55rem; left: 1.9rem; width: .55rem; height: .55rem; border-radius: 50%; background: var(--warning); box-shadow: 0 0 0 2px var(--surface); }
+.sidebar-bottom { margin-top: auto; padding: 2rem .75rem 0; display: grid; gap: 1.2rem; }
+.sidebar-bottom p { font-family: var(--display); color: var(--faint); font-size: 1.5rem; font-weight: 600; line-height: 1.15; letter-spacing: -.03em; }
+.sidebar-home { font-size: .75rem; color: var(--faint); }
+main.host { margin: 0 0 0 224px; max-width: 1550px; padding: 0 2.75rem 4rem; }
+.masthead { grid-template-columns: minmax(0,1fr) auto auto auto; grid-template-areas: "name mark room copy"; border-bottom: 1px solid var(--line); min-height: 88px; gap: 1.25rem; margin-bottom: 2.5rem; padding-block: 1rem; }
+.masthead h1 { font-size: 1.05rem; color: var(--text); }.masthead .room .code { font-size: 1.15rem; letter-spacing: .12em; }.masthead .connection { grid-area: mark; }
+.workspace-title { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.75rem; }
+.workspace-title h2 { font-size: clamp(2rem, 3vw, 2.75rem); font-weight: 700; letter-spacing: -.04em; margin-bottom: .5rem; }
+.workspace-title p { margin: 0; color: var(--muted); font-size: .875rem; }
+.room-stats { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 2rem; padding-bottom: 1.5rem; font-size: .8125rem; color: var(--muted); }
+.room-stats strong { font-family: var(--display); color: var(--text); font-size: 1.125rem; padding-right: .25rem; }
+#requests-status { margin-left: auto; color: var(--positive); }#requests-status.is-paused { color: var(--warning); }
+.board { grid-template-columns: minmax(0,1fr) 280px; gap: 1.5rem; align-items: start; }.board > .col { display: contents; }
+.board .col > section { margin: 0; min-width: 0; }
+.show { grid-column: 1; grid-row: 1; padding: 2rem; position: relative; overflow: hidden; background: linear-gradient(120deg, var(--pill-accent-bg), var(--surface)); }
+.show::before { content: ""; position: absolute; right: -65px; top: -110px; width: 270px; height: 270px; border: 1px solid var(--line); border-radius: 50%; pointer-events: none; }
+.now-singer { font-size: clamp(2.5rem, 4.5vw, 4rem); }.now-singer.idle { color: var(--text); font-size: 2.5rem; max-width: 10ch; }.now-label { font-size: .8125rem; }.now-song { font-size: 1rem; }
+.up-next { padding-top: 1rem; border-top: 1px solid var(--line); margin-top: 1.5rem; font-size: .875rem; }
+.show-actions { gap: .6rem; }.show-actions button { min-height: 3rem; font-size: .875rem; }.show-actions button.next { flex: 1 1 9rem; padding: .7rem 1rem; }.show-actions button.ghost { flex: 1 1 9rem; }
+.queue-section { grid-column: 1; grid-row: 2; }.section-head h2 { font-size: 1.15rem; }.section-head { margin-bottom: .6rem; }
+.invite-card { grid-column: 2; grid-row: 1 / span 2; text-align: center; padding: 1.5rem; }.invite-card h2 { font-size: 1.2rem; margin-bottom: .5rem; }.invite-card > p { line-height: 1.6; }
+#invite-qr { background: white; border-radius: 12px; padding: 12px; width: 150px; margin: 1.5rem auto; }#invite-qr:empty { display: none; }#invite-qr svg { display: block; width: 100%; height: auto; }
+.invite-code { font-size: 2.8rem; letter-spacing: .15em; line-height: 1.1; padding-left: .15em; }.invite-card button { width: 100%; margin-top: .6rem; }
+.board [class*="view-"]:not(.view-overview) { grid-column: 1 / -1; }
+.board .view-settings, .board .view-songs { max-width: 760px; width: 100%; }.board .view-recordings { width: 100%; }
+body:not([data-view="overview"]) .view-overview, body:not([data-view="screens"]) .view-screens, body:not([data-view="songs"]) .view-songs, body:not([data-view="settings"]) .view-settings, body:not([data-view="recordings"]) .view-recordings { display: none; }
+.singer-name .name { font-size: 1.1rem; }.pos { width: 2rem; height: 2rem; border-radius: 50%; background: var(--raised); display: grid; place-items: center; font-size: .8rem; color: var(--muted); }
+ol.songs { margin-left: 2.75rem; }ol.singers > li.singer { padding-block: 1.1rem; }.list-card .empty { padding: 1rem 0; font-size: .875rem; line-height: 1.75; }
+.tv-list { grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr)); }
+#add-section .section-head, .view-settings > .section-head, #rec-section > .section-head { margin-bottom: 1rem; }
+@media (max-width: 1200px) { main.host { padding-inline: 1.75rem; }.board { grid-template-columns: minmax(0, 1fr) 240px; }.show { padding: 1.5rem; }.masthead { gap: .75rem; }.masthead .connection { display: none; }.masthead { grid-template-columns: minmax(0,1fr) auto auto; grid-template-areas: "name room copy"; } }
+@media (max-width: 1000px) { .sidebar { width: 195px; padding-inline: .75rem; }.sidebar .wordmark { font-size: 1.2rem; }main.host { margin-left: 195px; padding-inline: 1.25rem; }.board { grid-template-columns: minmax(0,1fr); }.invite-card { grid-column: 1; grid-row: 3; display: grid; grid-template-columns: 110px minmax(0, 1fr); column-gap: 1.5rem; text-align: left; align-items: center; }#invite-qr { grid-column: 1; grid-row: 1 / span 5; width: 110px; margin: 0; }.invite-card h2, .invite-card p, .invite-card button, .invite-code { grid-column: 2; }.invite-code { padding: 0; font-size: 2rem; }.invite-card p { margin-bottom: .25rem; }.invite-card button { width: fit-content; }.masthead { grid-template-areas: "name room" "copy copy"; grid-template-columns: 1fr auto; }.masthead #copy-host { justify-self: start; }.dock { left: 195px; } }
+@media (max-width: 700px) { .sidebar { position: relative; width: auto; padding: 1rem 1rem 0; border-right: 0; border-bottom: 1px solid var(--line); flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; }.sidebar-label, .sidebar-bottom p, .sidebar-home { display: none; }.sidebar-bottom { padding: 0; margin: 0; order: 1; }.host-nav { order: 2; display: flex; width: calc(100% + 2rem); margin-inline: -1rem; padding: 0 .5rem .6rem; overflow-x: auto; gap: .2rem; }.host-nav button { width: auto; flex: none; font-size: .75rem; gap: .4rem; padding: .65rem .7rem; }.host-nav button svg { width: 1rem; height: 1rem; }main.host { margin: 0; padding-inline: 1rem; }.masthead { min-height: auto; margin-bottom: 1.5rem; padding-block: 1rem; gap: .6rem; }.masthead #copy-host { min-height: 2.25rem; font-size: .75rem; }.workspace-title { align-items: start; }.workspace-title p { max-width: 26ch; }.workspace-title .button { padding-inline: .75rem; min-height: 2.5rem; }.room-stats { gap: .5rem 1rem; font-size: .75rem; }.room-stats strong { font-size: 1rem; }.board { gap: 1.25rem; }.show { padding: 1.25rem; }.now-singer.idle { font-size: 2.25rem; max-width: none; }.dock { left: 0; }.theme-picker svg { display: none; }.screens-empty { grid-template-columns: 1fr; }.screens-empty .tv { max-width: 8rem; }.invite-card { padding: 1.25rem; }.setting { grid-template-columns: minmax(0,1fr); }.setting-label { min-height: 2rem; }.rules { gap: 1rem; } }
+
+@container (max-width: 31rem) {
+  .setting .segmented.layouts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
+  .setting .segmented.layouts button { min-width: 0; padding-inline: .35rem; }
+}
+
+@media (max-width: 700px) {
+  .host-nav { width: 100%; margin: 0; padding: 0 0 .6rem; overflow: visible; }
+  .host-nav button { flex: 1; min-width: 0; flex-direction: column; gap: .35rem; padding: .65rem .1rem; font-size: .625rem; }
+  .host-nav button span { display: none; }
+  .host-nav button::after { content: attr(data-mobile-label); }
+  .host-nav button svg { width: 1.2rem; height: 1.2rem; }
+}
+.add-singer { margin-top: .75rem; }
+.move-dialog { max-width: min(26rem, calc(100vw - 2rem)); border: 1px solid var(--line); border-radius: 16px; background: var(--raised); color: var(--text); padding: 1.5rem; text-align: center; }.move-dialog::backdrop { background: rgb(0 0 0 / .55); }.move-dialog form { margin-top: 1rem; }
+
+/* ---- Save songs to the library ---- */
+#save-section .list-card { display: grid; gap: .75rem; padding-block: 1rem; }
+#yt-search { display: flex; gap: .6rem; }
+#yt-search input { flex: 1; min-width: 0; }
+#yt-search button { flex: none; }
+#yt-results:empty, #saves:empty { display: none; }
+#yt-results > li + li, #saves > li + li { border-top: 1px solid var(--rule); }

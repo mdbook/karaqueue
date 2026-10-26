@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#211820"><meta name="description" content="Your songs. Your friends. Everyone gets a turn. Start a karaoke room or join the party with KaraQueue.">
+  <title>KaraQueue · Make a night of it</title>
+  <link rel="icon" href="/static/KaraQueue-Icon.png"><script src="/static/theme.js"></script>
+  <link rel="stylesheet" href="/static/style.css"><link rel="stylesheet" href="/static/home.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="home-bar wrap"><a class="wordmark" href="/"><span class="brand-symbol" aria-hidden="true"><i></i><i></i><i></i></span>KaraQueue</a><div class="home-links"><a href="#how-it-works">How it works</a><label class="theme-picker"><span class="sr">Color theme</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg><select data-theme-picker aria-label="Color theme"><option value="sunset">Sunset</option><option value="midnight">Midnight</option><option value="daylight">Daylight</option></select></label></div></header>
+<main id="main" class="home wrap">
+  <section class="hero" aria-labelledby="title">
+    <div class="hero-copy">
+      <h1 id="title">Good friends.<br>Questionable<br>high notes.</h1>
+      <p class="lede">The best nights have a soundtrack. Pick your songs, pass the mic, and give everyone their moment.</p>
+      <div class="start">
+        <div class="entry-tabs" role="tablist" aria-label="Get started">
+          <button type="button" role="tab" id="join-tab" aria-selected="true" aria-controls="join-panel" tabindex="0">Join the party</button>
+          <button type="button" role="tab" id="host-tab" aria-selected="false" aria-controls="host-panel" tabindex="-1">Host a night</button>
+        </div>
+        <div id="join-panel" role="tabpanel" aria-labelledby="join-tab">
+          <form id="join"><label for="code">Enter your room code</label><div class="entry-row"><input id="code" placeholder="ABC234" maxlength="12" required autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false"><button>Join room</button></div><p class="entry-hint">Find it on the big screen. No account needed.</p></form>
+        </div>
+        <div id="host-panel" role="tabpanel" aria-labelledby="host-tab" hidden>
+          <form id="account-form" class="account-form" hidden><label for="account-name">Sign in to start a room</label><div class="entry-row"><input id="account-name" placeholder="Your name (empty for the admin password)" autocomplete="username" spellcheck="false"><input id="account-pw" type="password" placeholder="Password" autocomplete="current-password" required aria-label="Password"><button>Sign in</button></div><p class="entry-hint">This server asks hosts to sign in. Joining a room never needs an account.</p></form>
+          <form id="create"><label for="name">Give your night a name</label><div class="entry-row"><input id="name" placeholder="Friday night karaoke" maxlength="120" autocomplete="off" required><button>Start a room</button></div><p class="entry-hint">You bring the people. We'll keep the queue moving.</p></form>
+        </div>
+      </div>
+    </div>
+    <figure class="party-art" aria-label="Illustration of a sunset record with an example karaoke queue">
+      <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div>
+      <div class="sun-record"><div class="record-grooves"></div><div class="record-center"><span>One more song</span><b>kq.</b><span>Everyone gets a turn</span></div></div>
+      <span class="art-spark spark-one" aria-hidden="true">✦</span><span class="art-spark spark-two" aria-hidden="true">✦</span>
+      <div class="demo-ticket"><div class="ticket-heading"><span class="live-dot"></span>On the mic <span class="small muted">Example room</span></div><div class="ticket-body"><div class="demo-avatar">M</div><div><strong>Maya</strong><span>Dancing Queen <span class="muted">/ ABBA</span></span></div><div class="equalizer" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div></div><div class="ticket-next"><span class="muted">Up next</span><strong>Theo</strong><span class="muted">Valerie</span><span class="ticket-position">You're after Theo</span></div></div>
+      <figcaption>A little less waiting. A lot more singing.</figcaption>
+    </figure>
+  </section>
+  <section class="how" id="how-it-works" aria-labelledby="how-title"><div class="how-intro"><h2 id="how-title">From “just one song”<br>to the last encore.</h2><p class="muted">Your phone is the songbook.<br>The room is your stage.</p></div><ol class="steps"><li><span class="step-number">1</span><div><h3>Make yourself at home</h3><p>Scan the QR code or enter the room code. Pick a name and you're in.</p></div></li><li><span class="step-number">2</span><div><h3>Find your anthem</h3><p>Add songs from YouTube or the host's library. Put your favorites first.</p></div></li><li><span class="step-number">3</span><div><h3>Take your moment</h3><p>Everyone sings once before anyone sings twice. We'll show you when you're up.</p></div></li></ol></section>
+  <div id="flash" role="status" aria-live="polite" hidden></div>
+</main>
+<footer class="home-footer wrap"><a class="wordmark" href="/"><span class="brand-symbol" aria-hidden="true"><i></i><i></i><i></i></span>KaraQueue</a><span>Made for the nights worth losing your voice over.</span><a href="/admin">Server admin</a></footer>
+<script>
+const tabs = [...document.querySelectorAll('[role="tab"]')];
+function selectTab(tab) {
+  tabs.forEach(t => { const active = t === tab; t.setAttribute('aria-selected', String(active)); t.tabIndex = active ? 0 : -1; document.getElementById(t.getAttribute('aria-controls')).hidden = !active; });
+}
+tabs.forEach(tab => {
+  tab.onclick = () => selectTab(tab);
+  tab.onkeydown = event => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const next = event.key === 'Home' ? tabs[0] : event.key === 'End' ? tabs[1] : tabs[1 - tabs.indexOf(tab)];
+    selectTab(next); next.focus();
+  };
+});
+</script>
+<script src="/static/kq.js"></script>
+<script>
+  document.getElementById("join").onsubmit = (e) => {
+    e.preventDefault();
+    const typed = document.getElementById("code").value.replace(/\s+/g, "").toUpperCase();
+    if (typed) location.href = "/r/" + encodeURIComponent(typed);
+  };
+  // When the server only lets account holders start rooms, sign in first; the key is kept like a room key.
+  const create = document.getElementById("create"), accountForm = document.getElementById("account-form");
+  const hint = create.querySelector(".entry-hint"), hintText = hint.textContent;
+  // Signed in on the admin page counts too: admins can start rooms.
+  const signedIn = () => keys.get("account") || (keys.get("admin") ? { ...keys.get("admin"), name: "admin" } : null);
+  const signOut = () => {
+    const tokens = new Set([keys.get("account"), keys.get("admin")].filter(Boolean).map((k) => k.token));
+    for (const token of tokens) fetch("/api/admin/logout", { method: "POST", headers: { Authorization: "Bearer " + token } }).catch(() => {});
+    keys.drop("account");
+    keys.drop("admin");
+  };
+  function showAccount(needed) {
+    const account = signedIn();
+    accountForm.hidden = !needed || !!account;
+    create.hidden = needed && !account;
+    hint.replaceChildren(needed && account
+      ? h("span", {}, "Signed in as " + account.name + ". ", h("a", { href: "#", onclick: (e) => { e.preventDefault(); signOut(); showAccount(true); } }, "Sign out"))
+      : hintText);
+  }
+  fetch("/api/config").then((r) => r.json()).then((cfg) => showAccount(!!cfg.accounts_only)).catch(() => {});
+  accountForm.onsubmit = act(async (e) => {
+    e.preventDefault();
+    const res = await fetch("/api/admin/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: document.getElementById("account-name").value.trim(), password: document.getElementById("account-pw").value }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't sign in. Try again in a moment.");
+    keys.set("account", { token: data.token, name: data.name });
+    document.getElementById("account-pw").value = "";
+    showAccount(true);
+    document.getElementById("name").focus();
+  });
+
+  create.onsubmit = act(async (e) => {
+    e.preventDefault();
+    const button = e.target.querySelector("button");
+    button.disabled = true;
+    try {
+      const account = signedIn();
+      const res = await fetch("/api/rooms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(account ? { Authorization: "Bearer " + account.token } : {}) },
+        body: JSON.stringify({ name: document.getElementById("name").value }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401 || res.status === 403) {
+        // Signed out by a restart, or the account was turned off: ask again.
+        signOut();
+        showAccount(true);
+      }
+      if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't create the room. Try again in a moment.");
+      keys.set(data.code, { role: "host", token: data.host_token });
+      location.href = "/r/" + data.code + "/host";
+    } catch (err) {
+      button.disabled = false;
+      throw err;
+    }
+  });
+</script>
+</body>
+</html>

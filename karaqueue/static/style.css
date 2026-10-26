@@ -1,0 +1,240 @@
+@font-face {
+  font-family: "Bricolage Grotesque";
+  src: url("/static/fonts/BricolageGrotesque.woff2") format("woff2");
+  font-weight: 200 800;
+  font-stretch: 75% 100%;
+  font-display: swap;
+}
+
+:root {
+  --ground: #211820; --surface: #2c222b; --raised: #382c35; --control: #57434d;
+  --rule: #42333d; --line: #51404a; --line-strong: #816573;
+  --text: #fff4e9; --muted: #d1bbc4; --faint: #b49da8;
+  --accent: #ff967b; --gold: #ffc397; --red: #ff737d;
+  --sunset: linear-gradient(105deg, var(--gold), var(--accent) 60%, var(--red));
+  --negative: #ff9ba9; --positive: #b6dcb3; --warning: #ffce8d;
+  --pill-accent-bg: #4b3035; --pill-negative-bg: #4b2634; --pill-positive-bg: #293d32;
+  --button-ink: #2c1c24; --art-top: #ffd496; --art-mid: #ff9479; --art-bottom: #c34d75;
+  --display: "Bricolage Grotesque", system-ui, sans-serif;
+  --body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --fs-title: 1.375rem; --fs-section: 1.0625rem; --fs-body: .9375rem; --fs-small: .8125rem;
+  --ease: cubic-bezier(.2,0,0,1); --ease-out: cubic-bezier(.05,.7,.1,1);
+  --quick: 120ms; --standard: 240ms; --slow: 1400ms;
+  --radius-card: 20px; --radius-control: 12px; --gap: 16px; --pad: 24px; --control-height: 2.75rem;
+  color-scheme: dark;
+}
+:root[data-theme="midnight"] {
+  --ground: #111c2b; --surface: #1b293c; --raised: #25364b; --control: #3c526c;
+  --rule: #304258; --line: #3b5069; --line-strong: #6c88a6;
+  --text: #edf5ff; --muted: #b7c9de; --faint: #a0b5cd;
+  --accent: #a6c1ff; --gold: #c5d9ff; --red: #bda6ef; --negative: #ff9caa;
+  --positive: #a0dfc5; --warning: #ffd09a; --button-ink: #15243b;
+  --pill-accent-bg: #304064; --pill-negative-bg: #492c42; --pill-positive-bg: #254339;
+  --art-top: #d4d8ff; --art-mid: #899eea; --art-bottom: #5d548b;
+}
+:root[data-theme="daylight"] {
+  --ground: #faf5ef; --surface: #ffffff; --raised: #f2e9e4; --control: #e0cfc8;
+  --rule: #e6d7d1; --line: #d8c5bd; --line-strong: #a5857a;
+  --text: #35232e; --muted: #705760; --faint: #80666c;
+  --accent: #a63836; --gold: #985015; --red: #a93154; --negative: #ae2544;
+  --positive: #286c45; --warning: #845311; --button-ink: #ffffff;
+  --pill-accent-bg: #fbe4db; --pill-negative-bg: #fbe1e8; --pill-positive-bg: #dfefdf;
+  --art-top: #ffd496; --art-mid: #ff9479; --art-bottom: #c34d75;
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--text);
+  font: 100%/1.5 var(--body);
+  -webkit-font-smoothing: antialiased;
+}
+
+main { max-width: 40rem; margin: 0 auto; padding: 1.25rem 1rem 4rem; }
+
+h1, h2, h3, .display {
+  font-family: var(--display);
+  font-optical-sizing: auto;
+  margin: 0 0 .5rem;
+}
+h1 { font-size: clamp(1.75rem, 5vw, 2.5rem); font-weight: 700; line-height: 1; letter-spacing: -0.03em; }
+h2 { font-size: var(--fs-title); font-weight: 600; line-height: 1.2; letter-spacing: -0.01em; }
+h3 { font-size: var(--fs-section); font-weight: 600; line-height: 1.25; }
+p { margin: 0 0 .75rem; }
+a { color: var(--text); text-decoration-color: var(--faint); text-underline-offset: .2em; }
+a:hover { text-decoration-color: var(--text); }
+.muted { color: var(--muted); }
+.faint { color: var(--faint); }
+.small { font-size: var(--fs-small); }
+
+/* The room code is read off a wall and typed in, so it gets room to breathe. */
+.code {
+  font-family: var(--display);
+  font-weight: 700;
+  font-stretch: 85%;
+  letter-spacing: .06em;
+  color: var(--accent);
+  background: var(--sunset);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Surfaces: a step up from the ground. Nested things go one more step up. */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  padding: var(--pad);
+}
+section + section { margin-top: 1.75rem; }
+
+/* Forms */
+form { display: grid; gap: .6rem; }
+.row { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+.row > .grow, .grow { flex: 1; min-width: 0; }
+
+/* Fields are filled with a hairline. 16px text so phones don't zoom in on focus. */
+input, select {
+  width: 100%;
+  font: inherit;
+  font-size: max(16px, 1em);
+  min-height: 2.75rem;
+  padding: .6rem 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--raised);
+  color: var(--text);
+}
+input:hover, select:hover { border-color: var(--line-strong); }
+input::placeholder { color: var(--faint); }
+input[type="range"] { min-height: 0; padding: 0; border: 0; background: none; accent-color: var(--accent); }
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Primary actions use the selected theme accent; secondary actions sit on a neutral surface. */
+button, .button {
+  font: inherit;
+  font-weight: 600;
+  min-height: var(--control-height);
+  padding: .5rem 1.15rem;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--accent);
+  color: var(--button-ink);
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .4rem;
+  touch-action: manipulation;
+}
+button:hover, .button:hover { background: color-mix(in srgb, var(--accent) 85%, var(--text)); }
+button.ghost, .button.ghost { background: var(--raised); color: var(--text); border: 1px solid var(--line); }
+button.ghost:hover, .button.ghost:hover { background: var(--control); border-color: var(--line-strong); }
+button.quiet, .button.quiet { background: transparent; color: var(--muted); padding: .4rem .6rem; }
+button.quiet:hover { background: transparent; color: var(--text); }
+button.danger { background: var(--pill-negative-bg); color: var(--negative); border: 1px solid var(--negative); }
+button.danger:hover { background: var(--raised); }
+button.small, .button.small { min-height: 2.5rem; padding: .4rem .85rem; font-size: var(--fs-small); }
+button.icon { padding: .45rem; width: var(--control-height); height: var(--control-height); min-height: 0; border-radius: 50%; }
+button:disabled { opacity: .4; cursor: default; }
+
+/* Segmented control: mutually exclusive choices. Mark the chosen one aria-pressed="true". */
+.segmented { display: inline-flex; padding: 3px; gap: 2px; border-radius: var(--radius-control); background: var(--raised); border: 1px solid var(--line); }
+.segmented button { background: transparent; color: var(--muted); min-height: 2.5rem; padding: .4rem .85rem; font-size: var(--fs-small); font-weight: 600; }
+.segmented button:hover { background: transparent; color: var(--text); }
+.segmented button[aria-pressed="true"] { background: var(--control); color: var(--text); }
+
+/* Lists: rows separated by space and a faint tone, not lines. */
+ol, ul { list-style: none; margin: 0; padding: 0; }
+li { display: flex; gap: .6rem; align-items: center; padding: .6rem 0; }
+li .grow { overflow-wrap: anywhere; }
+li.me { font-weight: 600; }
+li.hidden-singer { opacity: .5; }
+.by { color: var(--muted); }
+
+/* Who's singing. Shared by every page; the big screen scales it up. */
+.now { display: grid; gap: .1rem; }
+.now .label { color: var(--muted); font-size: var(--fs-small); }
+.now .singer { font-family: var(--display); font-size: 2.25rem; font-weight: 700; line-height: 1; letter-spacing: -0.03em; }
+.now .song { font-size: 1.05rem; }
+
+/* The karaoke wipe: the name fills with the sunset from left to right, like a lyric being sung.
+   Give the element data-text with the same words as its text (wipeText() in kq.js does both),
+   then add .sung to play it. A sunset-coloured copy revealed by a clip. */
+.wipe { position: relative; display: inline-block; }
+.wipe::after {
+  content: attr(data-text);
+  /* Bigger than the text by its padding, so letters that reach past their box (the k in Mik,
+     a y's tail) are still covered by the gradient instead of showing the plain copy beneath. */
+  position: absolute; inset: -.15em -.2em; padding: .15em .2em;
+  color: var(--accent);
+  background: var(--sunset);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  clip-path: inset(0 100% 0 0);
+  pointer-events: none;
+}
+.wipe.sung::after { clip-path: inset(0 0 0 0); }
+
+/* Toast for errors and confirmations. It floats, so it's the one thing with a shadow. */
+#flash {
+  position: fixed; left: 50%; bottom: 1.25rem; transform: translateX(-50%);
+  background: var(--raised);
+  color: var(--text); font-weight: 600;
+  padding: .7rem 1.15rem; border-radius: var(--radius-control); width: max-content; max-width: 90vw;
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 12px 32px #0009;
+  z-index: 50;
+}
+#flash.error { color: var(--negative); }
+
+@media (prefers-reduced-motion: no-preference) {
+  button, .button { transition: transform var(--quick) var(--ease), background-color var(--quick) var(--ease), color var(--quick) var(--ease); }
+  button:active:not(:disabled) { transform: scale(.97); }
+  .wipe::after { transition: clip-path var(--slow) cubic-bezier(.45, 0, .55, 1); }
+  #flash:not([hidden]) { animation: toast var(--standard) var(--ease-out); }
+  @keyframes toast { from { opacity: 0; transform: translate(-50%, 12px) scale(.98); } }
+}
+
+/* Shared navigation, accessible feedback, and themes. */
+html { scroll-padding-top: 6rem; }
+body { min-width: 320px; }
+button, input, select { transition: border-color 120ms, background-color 120ms; }
+button:disabled { opacity: .5; }
+button svg, .button svg { width: 1.2rem; height: 1.2rem; flex: none; }
+.wordmark { display: inline-flex; align-items: center; gap: .65rem; font-family: var(--display); font-weight: 750; font-size: 1.4rem; letter-spacing: -.04em; text-decoration: none; white-space: nowrap; }
+.brand-symbol { display: inline-flex; align-items: center; justify-content: center; gap: 3px; width: 32px; height: 32px; flex: none; }
+.brand-symbol i { width: 5px; height: 15px; border-radius: 4px; background: var(--accent); transform: rotate(16deg); }
+.brand-symbol i:nth-child(2) { height: 28px; background: var(--gold); }
+.brand-symbol i:nth-child(3) { height: 21px; background: var(--red); }
+.theme-picker { display: inline-flex; align-items: center; gap: .5rem; color: var(--muted); font-size: var(--fs-small); }
+.theme-picker select { width: auto; min-height: 2.5rem; padding: .4rem 1.8rem .4rem .65rem; font-size: .8125rem; background: var(--surface); border-radius: 10px; }
+.theme-picker svg { width: 1.1rem; height: 1.1rem; }
+.sr, .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.skip-link { position: fixed; top: -8rem; left: 1rem; z-index: 100; background: var(--accent); color: var(--button-ink); padding: .75rem 1rem; border-radius: 8px; }
+.skip-link:focus { top: 1rem; }
+.connection { display: inline-flex; gap: .4rem; align-items: center; font-size: var(--fs-small); color: var(--muted); }
+.connection::before { content: ""; width: 6px; height: 6px; border-radius: 100%; background: var(--positive); }
+.connection[data-status="offline"]::before { background: var(--warning); }
+#flash { border-radius: 14px; }
+#flash.ok { border-color: var(--positive); }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; } }
+@media (prefers-contrast: more) { :root { --line: var(--faint); --line-strong: var(--text); } }
+
+@media (prefers-reduced-motion: reduce) { button, .button, input, select { transition: none !important; } }
+button.link { background: none; border: 0; padding: 0; min-height: 0; color: var(--text); text-decoration: underline; font: inherit; cursor: pointer; }
+.move-qr { background: white; border-radius: 12px; padding: 12px; width: 180px; margin: 1rem auto; }.move-qr svg { display: block; width: 100%; height: auto; }
+
+/* Naming a song before it's saved to the library (admin and host pages). */
+.song-edit { display: flex; flex-wrap: wrap; gap: .5rem; width: 100%; align-items: center; }
+.song-edit input { flex: 1 1 12rem; min-width: 0; }
+#saves .off { color: var(--negative); }

@@ -1,0 +1,410 @@
+/* The big screen. One page, five layouts, switched by body[data-layout].
+   Every element exists once; layouts only place, size and hide them, so the video
+   iframe never moves in the DOM (moving it would reload the video).
+
+   It hangs on a wall across a dim room, so it's true black and flat like the rest of the app,
+   only bigger. The singer's name is the loudest thing on it, the room code second.
+   Sizes use vmin so a 1080p TV, a laptop and a portrait tablet all read from across a room. */
+
+:root {
+  --pad: clamp(1rem, 3.2vmin, 3.5rem);
+  --gap: clamp(.75rem, 2.4vmin, 2.5rem);
+  /* The few sizes the screen uses: one huge, a big one, a reading size and a small one. */
+  --tv-hero: clamp(2.5rem, 12.5vmin, 13rem);
+  --tv-big: clamp(1.6rem, 5.4vmin, 4.8rem);
+  --tv-read: clamp(1.1rem, 3.2vmin, 2.6rem);
+  --tv-small: clamp(.95rem, 2.3vmin, 1.8rem);
+}
+
+body.screen { height: 100dvh; overflow: hidden; background: var(--ground); }
+body.screen.still { cursor: none; }
+
+main#screen {
+  max-width: none;
+  margin: 0;
+  height: 100dvh;
+  padding: var(--pad);
+  display: grid;
+  gap: var(--gap);
+}
+
+/* ---- Shared pieces ---- */
+
+#stage-wrap { grid-area: stage; container-type: size; min-height: 0; display: grid; }
+#stage {
+  position: relative;
+  width: min(100cqw, calc(100cqh * 16 / 9));
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  container-type: size;
+}
+#stage iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+body.has-video #stage { background: #000; }
+body:not(.has-video) #stage iframe { visibility: hidden; }
+body.has-video #stage-empty { display: none; }
+
+/* Songs from the server's own library play in a plain video element instead of YouTube. */
+#file { position: absolute; inset: 0; width: 100%; height: 100%; background: #000; display: none; }
+body.has-video[data-source="file"] #file { display: block; }
+body[data-source="file"] #stage iframe { visibility: hidden; }
+/* An audio-only library song shows the song card rather than a black box. */
+body.has-video.audio-only #file { opacity: 0; }
+body.has-video.audio-only #stage-empty { display: grid; }
+body.has-video.audio-only #stage { background: var(--surface); }
+body.audio-only[data-layout="video"] #stage { background: transparent; }
+body.audio-only[data-layout="video"] #now, body.audio-only[data-layout="video"] #next { display: none; }
+/* MP3+CDG: the lyrics canvas takes the stage, scaled up from its tiny 300x216. */
+#cdg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: none; }
+body.has-video.cdg #cdg { display: block; }
+body.has-video.cdg #stage { background: #000; }
+body.has-video.cdg #stage-empty { display: none; }
+
+#stage-empty {
+  position: absolute; inset: 0;
+  display: grid; align-content: center; justify-items: start; gap: 1.4vmin;
+  padding: 7%;
+}
+#stage-empty .title {
+  font-family: var(--display); font-weight: 700; font-stretch: 92%;
+  font-size: 14cqmin; line-height: 1; letter-spacing: -0.03em;
+  overflow-wrap: anywhere;
+}
+#stage-empty .artist { font-size: 6cqmin; color: var(--muted); line-height: 1.2; }
+#stage-empty .note { margin-top: 4cqmin; font-size: 4cqmin; color: var(--faint); }
+[data-layout="split"] #stage-empty { align-content: end; gap: 1.5cqmin; }
+#stage-empty .mark { width: 20%; justify-self: center; }
+
+/* Names: the one place the display face gets loud. */
+.singer, .big, #next .name, #rotation .name, #room-name, .ident-name, .start-title {
+  font-family: var(--display);
+  font-optical-sizing: auto;
+  overflow-wrap: anywhere;
+}
+.singer, .big {
+  font-weight: 700;
+  font-stretch: 92%;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  /* Room for descenders under the wipe's clip. */
+  padding-bottom: .08em;
+  width: fit-content;
+  max-width: 100%;
+}
+.singer.idle, .big:not(.wipe) { color: var(--text); }
+
+#now { grid-area: now; display: grid; align-content: start; gap: 1vmin; min-width: 0; }
+#now .singer { font-size: var(--tv-hero); }
+#now .song, #stage-empty .song { font-size: var(--tv-read); line-height: 1.25; }
+.by { color: var(--muted); }
+
+#next { grid-area: next; display: flex; align-items: baseline; gap: .5em; min-width: 0; }
+#next .label { color: var(--muted); font-size: var(--tv-small); white-space: nowrap; }
+#next .name { font-weight: 700; font-stretch: 92%; font-size: var(--tv-big); line-height: 1; letter-spacing: -0.03em; }
+
+/* Singer order. A sequence, so it reads top to bottom; the next singer sits first and biggest.
+   Rows that don't fit spill into a second column that sits past the clip, so the list ends on
+   a whole name instead of half of one. */
+#order { grid-area: order; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+#order h2 { font-family: var(--body); font-size: var(--tv-small); font-weight: 600; color: var(--muted); margin-bottom: 1.2vmin; }
+#rotation { flex: 1; min-height: 0; overflow: hidden; columns: 1; column-gap: 50vw; column-fill: auto; }
+#rotation li {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 1em;
+  padding: 1vmin 0;
+  break-inside: avoid;
+}
+#rotation .name { font-weight: 600; font-size: var(--tv-read); line-height: 1.1; letter-spacing: -0.02em; min-width: 0; }
+#rotation .meta { color: var(--muted); font-size: var(--tv-small); white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* The next singer gets their own line so a long name never squeezes against its status. */
+#rotation li.next { flex-direction: column; align-items: flex-start; gap: .2em; padding-bottom: 2vmin; }
+#rotation li.next .name { font-weight: 700; font-size: var(--tv-big); line-height: 1; letter-spacing: -0.03em; }
+#rotation li.next .meta { order: -1; color: var(--text); font-weight: 600; }
+#rotation li.singing .name, #rotation li.singing .meta { color: var(--faint); }
+#rotation li.waiting { color: var(--faint); }
+#rotation li.waiting .meta { color: var(--faint); }
+#rotation li.empty { color: var(--muted); font-size: var(--tv-read); line-height: 1.3; }
+
+/* Join: the QR on a white tile so phones can read it, the code big enough to type from the couch. */
+#join {
+  grid-area: join;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: "qr scan" "qr how" "qr code";
+  align-content: end; align-items: end;
+  column-gap: 2.4vmin;
+  min-width: 0;
+}
+#room-name { display: none; grid-area: name; }
+#qr {
+  grid-area: qr;
+  width: clamp(7rem, 21vmin, 16rem);
+  padding: 1.2vmin;
+  border-radius: var(--radius-card);
+  background: #fff;
+}
+#qr svg { display: block; width: 100%; height: auto; }
+#qr .qrline { stroke: #000; }
+#join-scan { grid-area: scan; margin: 0; font-size: var(--tv-small); font-weight: 600; line-height: 1.15; }
+#join-how { grid-area: how; margin: .3em 0 0; color: var(--muted); font-size: var(--tv-small); line-height: 1.3; }
+#join-url { color: var(--text); overflow-wrap: anywhere; }
+#room-code { grid-area: code; font-size: clamp(2.25rem, 9vmin, 8rem); line-height: .95; margin-top: .12em; white-space: nowrap; }
+/* Spacing set here so it shrinks with the text when fitCode() scales it down. */
+#room-code span { display: inline-block; letter-spacing: .06em; }
+
+/* ---- split (default): stage + now singing on the left, order + join on the right ---- */
+
+[data-layout="split"] main#screen {
+  grid-template-columns: minmax(0, 1fr) clamp(17rem, 30vw, 38rem);
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas: "stage order" "now join";
+}
+[data-layout="split"] #next { display: none; }
+[data-layout="split"] #stage-wrap { align-items: start; justify-items: start; }
+[data-layout="split"] #now { align-self: end; }
+
+/* ---- video: edge to edge, with a small lower third ---- */
+
+[data-layout="video"] main#screen { padding: 0; grid-template: "stage" minmax(0, 1fr) / minmax(0, 1fr); }
+[data-layout="video"] #stage-wrap { place-items: center; }
+[data-layout="video"] #stage { width: 100cqw; aspect-ratio: auto; height: 100cqh; border: 0; border-radius: 0; }
+body:not(.has-video)[data-layout="video"] #stage { background: transparent; }
+[data-layout="video"] #order, [data-layout="video"] #join { display: none; }
+/* A solid dark plate: the lyrics under it are someone else's, so it never shows through. */
+[data-layout="video"] #now, [data-layout="video"] #next {
+  grid-area: stage;
+  position: relative; z-index: 1; /* above the stage, which is positioned */
+  align-self: end;
+  margin: var(--pad);
+  padding: 1.4vmin 2.4vmin 1.6vmin;
+  border-radius: var(--radius-card);
+  background: var(--ground);
+  border: 1px solid var(--line);
+  max-width: 45%;
+}
+[data-layout="video"] #now { justify-self: start; gap: .4vmin; }
+[data-layout="video"] #now .singer { font-size: clamp(1.6rem, 5.4vmin, 4.8rem); }
+[data-layout="video"] #now .song { font-size: var(--tv-small); }
+[data-layout="video"] #next { justify-self: end; }
+[data-layout="video"] #next .name { font-size: clamp(1.4rem, 4.4vmin, 3.8rem); }
+body:not(.has-video)[data-layout="video"] #now,
+body:not(.has-video)[data-layout="video"] #next { display: none; }
+body.quiet[data-layout="video"] #now,
+body.quiet[data-layout="video"] #next { opacity: 0; transform: translateY(1.5vmin); }
+
+/* No video: the singer's name is the whole picture. */
+[data-layout="video"] #stage-empty,
+[data-layout="confidence"] #stage-empty { justify-items: center; text-align: center; padding: 6vmin; gap: 2vmin; }
+#stage-empty .big { font-size: clamp(3rem, 18vmin, 18rem); }
+#stage-empty .big:not(.wipe) { font-size: clamp(2.5rem, 11vmin, 11rem); }
+#stage-empty .then { margin-top: 3vmin; color: var(--muted); font-size: var(--tv-read); }
+
+/* ---- queue: no video, for a second TV ---- */
+
+[data-layout="queue"] main#screen {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas: "now join" "order order";
+  row-gap: calc(var(--gap) * 2);
+}
+[data-layout="queue"] #stage-wrap, [data-layout="queue"] #next { display: none; }
+[data-layout="queue"] #now { align-content: end; }
+[data-layout="queue"] #now .singer { font-size: clamp(3rem, 16vmin, 15rem); }
+[data-layout="queue"] #join { grid-template-columns: auto auto; }
+[data-layout="queue"] #rotation { columns: 3 22rem; column-gap: calc(var(--gap) * 2.5); column-fill: balance; }
+[data-layout="queue"] #rotation .name { font-size: clamp(1.3rem, 5.4vmin, 4.8rem); }
+[data-layout="queue"] #rotation li { padding: 2vmin 0; }
+[data-layout="queue"] #rotation li.next .name { font-size: clamp(1.8rem, 8vmin, 7rem); }
+
+/* ---- splash: the join screen ---- */
+
+[data-layout="splash"] main#screen { grid-template: "join" 1fr / 1fr; place-items: center; }
+[data-layout="splash"] #stage-wrap, [data-layout="splash"] #now,
+[data-layout="splash"] #next, [data-layout="splash"] #order { display: none; }
+[data-layout="splash"] #join {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: 1fr auto auto auto auto 1fr;
+  grid-template-areas: ". qr" "name qr" "scan qr" "how qr" "code qr" ". qr";
+  align-content: center; align-items: start;
+  column-gap: 8vmin;
+  width: min(100%, 170vmin);
+}
+[data-layout="splash"] #room-name {
+  display: block; align-self: end;
+  font-size: clamp(2.5rem, 12vmin, 11rem); font-weight: 700; font-stretch: 92%;
+  line-height: 1; letter-spacing: -0.03em; margin-bottom: 5vmin;
+}
+[data-layout="splash"] #qr { width: min(72vmin, 42vw); padding: 2.6vmin; align-self: center; }
+[data-layout="splash"] #join-scan { font-size: clamp(1.4rem, 5vmin, 4.4rem); }
+[data-layout="splash"] #join-how { font-size: var(--tv-read); margin-top: 1.2vmin; }
+[data-layout="splash"] #room-code { font-size: clamp(3rem, 18vmin, 16rem); margin-top: 2vmin; }
+
+/* ---- confidence: faces the singer. Video as big as it gets, and who's next. ---- */
+
+[data-layout="confidence"] main#screen {
+  padding: calc(var(--pad) * .5) calc(var(--pad) * .5) var(--pad);
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas: "stage stage" "now next";
+  column-gap: var(--gap); row-gap: calc(var(--gap) * .7);
+}
+[data-layout="confidence"] #stage-wrap { place-items: center; }
+[data-layout="confidence"] #order, [data-layout="confidence"] #join { display: none; }
+[data-layout="confidence"] #now { align-self: center; gap: .4vmin; padding-left: calc(var(--pad) * .5); }
+[data-layout="confidence"] #now .singer { font-size: clamp(1.4rem, 4.6vmin, 4rem); }
+[data-layout="confidence"] #now .song { font-size: var(--tv-small); }
+body:not(.has-video)[data-layout="confidence"] #now,
+body.audio-only[data-layout="confidence"] #now { visibility: hidden; }
+[data-layout="confidence"] #next { align-self: center; padding-right: calc(var(--pad) * .5); }
+[data-layout="confidence"] #next .label { font-size: var(--tv-read); }
+[data-layout="confidence"] #next .name { font-size: clamp(2rem, 8vmin, 7.5rem); }
+
+/* ---- Portrait screens (tablets on a stand): stack instead of side by side ---- */
+
+@media (max-aspect-ratio: 4/5) {
+  body.screen[data-layout="split"], body.screen[data-layout="queue"] { overflow-y: auto; height: auto; min-height: 100dvh; }
+  [data-layout="split"] main#screen {
+    height: auto; min-height: 100dvh; align-content: start;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto auto;
+    grid-template-areas: "stage" "now" "order" "join";
+  }
+  [data-layout="split"] #stage-wrap { container-type: inline-size; }
+  [data-layout="split"] #stage { width: 100cqw; }
+  [data-layout="queue"] main#screen {
+    height: auto; min-height: 100dvh; align-content: start;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto;
+    grid-template-areas: "now" "join" "order";
+  }
+  [data-layout="queue"] #join { justify-content: start; }
+  [data-layout="split"] #rotation, [data-layout="queue"] #rotation { columns: auto; }
+  [data-layout="splash"] #join {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+    grid-template-areas: "name" "qr" "scan" "how" "code";
+    justify-items: center; text-align: center; row-gap: 1vmin;
+  }
+  [data-layout="splash"] #qr { width: min(70vw, 50vh); margin: 2vmin 0 4vmin; }
+  [data-layout="confidence"] main#screen { grid-template-areas: "stage stage" "next next"; }
+  [data-layout="confidence"] #now { display: none; }
+  [data-layout="confidence"] #next { flex-direction: column; align-items: center; gap: 0; justify-self: center; }
+}
+
+/* ---- Overlays: the name badge, identify, and the one tap the browser insists on ---- */
+
+#badge {
+  position: fixed; top: 1.6vmin; right: 1.6vmin; z-index: 30;
+  padding: .45em 1em;
+  border-radius: var(--radius-control);
+  background: var(--raised);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-size: var(--tv-small); font-weight: 600;
+  opacity: 0;
+  pointer-events: none;
+}
+#badge.on { opacity: 1; }
+
+/* Flat near-black scrims: the room behind them dims, it doesn't blur. */
+#ident {
+  position: fixed; inset: 0; z-index: 40;
+  display: grid; place-items: center;
+  padding: 6vmin;
+  background: color-mix(in srgb, var(--ground) 94%, transparent);
+  opacity: 0; visibility: hidden;
+  pointer-events: none;
+}
+#ident.on { opacity: 1; visibility: visible; }
+.ident-name {
+  font-weight: 700; font-stretch: 92%;
+  font-size: clamp(3rem, 20vmin, 20rem); line-height: 1; letter-spacing: -0.03em;
+  text-align: center;
+  color: var(--text);
+}
+
+#start {
+  position: fixed; inset: 0; z-index: 45;
+  width: 100%; height: 100%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3vmin;
+  padding: 6vmin;
+  border-radius: 0;
+  background: color-mix(in srgb, var(--ground) 94%, transparent);
+  color: var(--text);
+  font-weight: 400;
+  text-align: center;
+}
+#start:active:not(:disabled) { transform: none; }
+#start img { width: clamp(4rem, 13vmin, 9rem); }
+/* Primary activation action, sized to read from across the room. */
+.start-title {
+  font-weight: 700; font-stretch: 92%;
+  font-size: clamp(1.6rem, 6vmin, 5rem); letter-spacing: -0.02em; line-height: 1;
+  padding: .45em 1.1em .5em;
+  border-radius: var(--radius-control);
+  background: var(--text);
+  color: var(--ground);
+}
+.start-sub { max-width: 30em; color: var(--muted); font-size: var(--tv-small); line-height: 1.4; }
+#start.gone { opacity: 0; visibility: hidden; pointer-events: none; }
+
+body.screen #flash { font-size: var(--tv-small); bottom: 4vmin; }
+
+/* Until the host lets this screen in: a card with the code to match, readable from the sofa. */
+#pairing, #stuck {
+  position: fixed; right: 4vmin; top: 4vmin; z-index: 46; max-width: min(34em, 70vw);
+  padding: 2.4vmin 3vmin; border-radius: 20px; pointer-events: none;
+  background: var(--surface); border: 1px solid var(--line); box-shadow: 0 1.5vmin 5vmin rgba(0, 0, 0, .35);
+  font-size: var(--tv-small); line-height: 1.4;
+}
+#pairing[hidden], #stuck[hidden], #gone[hidden] { display: none; }
+#gone {
+  position: fixed; inset: 0; z-index: 60; display: grid; place-content: center; gap: 2vmin; padding: 8vmin;
+  text-align: center; background: var(--ground);
+}
+#gone h1 { font-family: var(--display); font-size: clamp(2.4rem, 9vmin, 7rem); line-height: 1; }
+#gone p { font-size: var(--tv-small); color: var(--muted); }
+#stuck { top: auto; bottom: 4vmin; }
+#pairing .pair-code {
+  display: block; margin: .2em 0 .1em; font-family: var(--display); font-weight: 700;
+  font-size: clamp(2.4rem, 11vmin, 8rem); letter-spacing: .12em; line-height: 1; font-variant-numeric: tabular-nums;
+}
+#pairing .pair-how { color: var(--muted); }
+
+/* Motion. Calm everywhere; the karaoke wipe in style.css is the one big moment. */
+@media (prefers-reduced-motion: no-preference) {
+  #badge { transition: opacity 600ms var(--ease); }
+  #ident { transition: opacity var(--standard) var(--ease), visibility 0s linear var(--standard); }
+  #ident.on { transition: opacity var(--standard) var(--ease-out), visibility 0s; }
+  #ident .ident-name { transition: transform 400ms var(--ease-out); transform: scale(.96); }
+  #ident.on .ident-name { transform: none; }
+  #start { transition: opacity 300ms var(--ease), visibility 0s linear 300ms; }
+  #start:not(.gone) { transition: opacity 300ms var(--ease-out), visibility 0s; }
+  #start .start-title { transition: transform var(--quick) var(--ease); }
+  #start:active .start-title { transform: scale(.97); }
+  [data-layout="video"] #now, [data-layout="video"] #next {
+    transition: opacity 500ms var(--ease), transform 500ms var(--ease);
+  }
+  #stage-empty .getting { animation: getting 2.4s var(--ease) infinite alternate; }
+  @keyframes getting { from { opacity: .45; } to { opacity: 1; } }
+}
+@media (prefers-reduced-motion: reduce) {
+  #badge, #ident, #start, [data-layout="video"] #now, [data-layout="video"] #next { transition: opacity 200ms ease; }
+  body.quiet[data-layout="video"] #now, body.quiet[data-layout="video"] #next { transform: none; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  #ident, #start { background: var(--ground); }
+}
+
+/* Stage treatment inherits the selected theme without altering player placement. */
+.screen-theme { position: fixed; left: 1rem; top: 1rem; z-index: 46; padding: .35rem; border-radius: 12px; background: var(--ground); }
+body.screen.still .screen-theme { opacity: 0; pointer-events: none; }body.screen .screen-theme:focus-within { opacity: 1; pointer-events: auto; }
+#stage-empty { background: radial-gradient(ellipse at 90% 5%, var(--pill-accent-bg), transparent 75%); }
+#start { background: var(--ground); }#start img { border-radius: 24%; }.start-title { background: var(--accent); color: var(--button-ink); border-radius: 18px; }.start-sub { max-width: 28em; }
+[data-layout="split"] #order { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 2.5vmin; }
+#order h2 { padding-bottom: 1.5vmin; border-bottom: 1px solid var(--line); }
+#rotation li.next .meta { color: var(--accent); }#rotation li.next { border-bottom: 1px solid var(--line); margin-bottom: 1vmin; }
+[data-layout="queue"] #now { padding: 3vmin; border-left: .5vmin solid var(--accent); background: var(--surface); border-radius: 0 20px 20px 0; }
+[data-layout="splash"] #room-name { color: var(--text); }[data-layout="splash"] #join-scan { color: var(--accent); }

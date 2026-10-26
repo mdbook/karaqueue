@@ -1,0 +1,110 @@
+
+    main { max-width: 48rem; padding-top: 0; }
+    .bar { height: 3.5rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+    .wordmark { font-family: var(--display); font-weight: 700; font-size: var(--fs-title); letter-spacing: -0.02em; color: var(--text); text-decoration: none; }
+    .wordmark span { color: var(--muted); font-weight: 500; }
+    h1 { margin: 1.5rem 0 .5rem; }
+    .lede { color: var(--muted); max-width: 34rem; margin-bottom: 2rem; }
+
+    .sign-in { max-width: 24rem; }
+    .sign-in label { font-weight: 600; }
+
+    .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: .5rem 1rem; flex-wrap: wrap; margin-bottom: .75rem; }
+    .section-head h2 { margin: 0; }
+    section + section, .admin-settings + section { margin-top: 2.25rem; }
+
+    /* One row per setting: what it is on the left, the field on the right. */
+    .panel.list { padding-block: .25rem; }
+    .item { display: grid; gap: .5rem; padding-block: 1rem; }
+    .item + .item { border-top: 1px solid var(--rule); }
+    .item-head { display: flex; justify-content: space-between; align-items: baseline; gap: .5rem 1rem; flex-wrap: wrap; }
+    .item-label { font-weight: 600; }
+    .item-help { color: var(--muted); font-size: var(--fs-small); margin: 0; max-width: 36rem; }
+    .item .row input { flex: 1; min-width: 0; }
+    .item input.number { max-width: 9rem; font-variant-numeric: tabular-nums; }
+    .item .error { color: var(--negative); font-size: var(--fs-small); margin: 0; }
+    .source { font-size: var(--fs-small); color: var(--faint); white-space: nowrap; }
+    .source.here { color: var(--gold); }
+    .facts { display: flex; flex-wrap: wrap; gap: .25rem 1.25rem; color: var(--muted); font-size: var(--fs-body); font-variant-numeric: tabular-nums; }
+    .facts strong { color: var(--text); font-weight: 600; }
+    .startup code { font-size: var(--fs-small); color: var(--muted); }
+
+    .rooms li { gap: 1rem; padding: .85rem 0; }
+    .rooms li + li { border-top: 1px solid var(--rule); }
+    .rooms .code { font-size: 1.25rem; min-width: 4.5rem; }
+    .rooms .grow div { font-weight: 600; }
+    .rooms .grow span { color: var(--muted); font-size: var(--fs-small); }
+    .live { color: var(--positive); }
+    .empty { color: var(--muted); margin: 1rem 0; }
+
+    @media (min-width: 40rem) {
+      .item { grid-template-columns: minmax(0, 15rem) minmax(0, 1fr); column-gap: 1.5rem; align-items: start; }
+      .item-text { padding-top: .55rem; }
+    }
+
+main { max-width: 1080px; padding: 0 2.5rem 5rem; }
+.bar { min-height: 90px; height: auto; border-bottom: 1px solid var(--line); margin-bottom: 3rem; }.bar .wordmark { font-size: 1.35rem; }.admin-bar-tools { display: flex; align-items: center; gap: 1rem; }
+#page > h1 { font-size: clamp(2.5rem, 5vw, 3.5rem); letter-spacing: -.045em; margin: 0 0 1rem; }#page > .lede { font-size: .9375rem; max-width: 40rem; line-height: 1.75; }
+#gate { max-width: 480px; margin: 8vh auto; padding: 2.5rem; }#gate h1 { margin: 0 0 1rem; font-size: 2.5rem; }#gate .lede { margin-bottom: 2rem; }#gate .sign-in { max-width: none; gap: .75rem; }#gate button { margin-top: .5rem; }
+.admin-tabs { display: flex; gap: 1.75rem; border-bottom: 1px solid var(--line); margin-bottom: 2rem; overflow-x: auto; }.admin-tabs button { border-radius: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); padding: .75rem 0 1rem; white-space: nowrap; }.admin-tabs button[aria-current] { border-color: var(--accent); color: var(--accent); }
+.settings-filter { display: grid; gap: .5rem; font-size: .8125rem; color: var(--muted); max-width: 28rem; margin-bottom: 2rem; }.settings-filter input { background: var(--surface); }
+.item { padding-block: 1.5rem; gap: 1rem 3rem; }.item-help { line-height: 1.65; margin-top: .35rem; }.item-head { margin-top: .5rem; }.item-body { min-width: 0; }.source { white-space: normal; overflow-wrap: anywhere; }.startup code { overflow-wrap: anywhere; }.section-head h2 { font-size: 1.25rem; }#groups section + section { margin-top: 2rem; }
+#page > section { margin-top: 0; }.rooms li { padding-block: 1.25rem; }.rooms .code { font-size: 1.15rem; }.rooms .grow div { margin-bottom: .25rem; }
+body:not([data-admin-view="settings"]) .admin-settings, body:not([data-admin-view="rooms"]) .admin-rooms, body:not([data-admin-view="library"]) .admin-library, body:not([data-admin-view="server"]) .admin-server, body:not([data-admin-view="access"]) .admin-access { display: none; }
+@media (min-width: 700px) { .item { grid-template-columns: minmax(0,1fr) minmax(0,1fr); } }
+@media (max-width: 600px) { main { padding-inline: 1rem; }.bar { margin-bottom: 2rem; gap: .5rem; }.bar .wordmark { font-size: 1.1rem; }.admin-bar-tools { gap: .25rem; }.theme-picker svg { display: none; }#gate { margin-top: 2rem; padding: 1.5rem; }.item { grid-template-columns: 1fr; gap: .75rem; }.rooms li { flex-wrap: wrap; gap: .5rem; }.rooms .grow { flex-basis: 60%; }.rooms .danger { margin-left: auto; }.admin-tabs { gap: 1.5rem; } }
+
+@media (max-width: 400px) {
+  .bar { flex-wrap: wrap; padding-block: 1rem; row-gap: .75rem; }
+  .admin-bar-tools { margin-left: auto; }
+}
+
+/* Accounts: one row per person, their controls on the right; the add form under the list. */
+#page > .admin-access + .admin-access { margin-top: 3rem; }
+.admin-access > .item-help { margin: 0 0 1rem; }
+.people li { flex-wrap: wrap; }
+.people .grow { flex: 1 1 12rem; min-width: 0; }
+.people .actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.people select { width: auto; min-height: 2.25rem; padding-block: .3rem; }
+.people .off { color: var(--negative); }
+.people .sessions, .people .fresh-link { flex-basis: 100%; }
+.people .sessions summary { cursor: pointer; color: var(--muted); font-size: .9rem; }
+.people .sessions ol { list-style: none; margin: .5rem 0; padding: 0; display: grid; gap: .5rem; }
+.people .sessions li { display: flex; align-items: center; gap: .75rem; padding: .5rem .75rem; border-radius: .5rem; background: color-mix(in srgb, currentColor 5%, transparent); }
+.people .fresh-link .item-help { margin: 0 0 .5rem; }
+.link-box { display: flex; gap: .5rem; }
+.link-box input { flex: 1; min-width: 0; font-family: ui-monospace, monospace; font-size: .85rem; }
+.invites { list-style: none; margin: 0; padding: 0; }
+.invites:empty { display: none; }
+.add-person { display: grid; gap: .75rem; margin-top: 1.25rem; padding: 1.25rem 1.5rem; }
+.add-person h3 { margin: 0; font-size: 1rem; }
+.add-person .row { flex-wrap: wrap; gap: .75rem; }
+.add-person .row input { flex: 1 1 14rem; min-width: 0; }
+.add-person select { width: auto; }
+
+/* Library: space per folder and disk, folders, songs and downloads, same list rows as accounts. */
+#page > .admin-library + .admin-library { margin-top: 3rem; }
+.admin-library > .item-help { margin: 0 0 1rem; }
+.admin-library .item-help code { font-size: var(--fs-small); overflow-wrap: anywhere; }
+.meter { height: .375rem; border-radius: 999px; background: var(--line); overflow: hidden; margin-top: .75rem; max-width: 20rem; }
+.meter i { display: block; height: 100%; background: var(--sunset, var(--accent)); border-radius: inherit; }
+.admin-library .off { color: var(--negative); }
+.songs li, .downloads li, .folders li { flex-wrap: wrap; }
+.songs .grow, .downloads .grow, .folders .grow { flex: 1 1 14rem; min-width: 0; overflow-wrap: anywhere; }
+.songs .grow div .muted, .downloads .grow div .muted { font-weight: 400; font-size: inherit; }
+.songs .actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.admin-library .more { margin-top: 1rem; }
+#save-section .panel:has(> ol:empty) { display: none; }
+/* Naming rules per folder, picking songs to fix together, and lookup matches. */
+.folders li > .naming { flex-basis: 100%; display: grid; gap: .75rem; }
+.naming .row { display: flex; gap: .5rem; }
+.naming .row input { flex: 1; min-width: 0; font-family: ui-monospace, monospace; }
+.naming .chips, .bulk-head { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.naming .chips button { font-family: ui-monospace, monospace; }
+.naming > button { justify-self: start; }
+.naming-result ul { list-style: none; margin: 0; padding: 0; display: grid; gap: .35rem; font-size: var(--fs-small); overflow-wrap: anywhere; }
+.naming-result code { color: var(--muted); margin-right: .25rem; }
+.songs li .pick { width: 1.25rem; height: 1.25rem; margin: 0; flex: none; align-self: center; accent-color: var(--accent); }
+.bulk { display: grid; gap: .75rem; margin-bottom: 1rem; position: sticky; top: .5rem; z-index: 2; }
+.lookup { list-style: none; margin: 0; padding: 0; flex-basis: 100%; display: flex; flex-wrap: wrap; gap: .5rem; }
+.naming-result li, .lookup li { padding: 0; border: 0; }
