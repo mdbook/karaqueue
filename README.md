@@ -1,6 +1,30 @@
-# KaraQueue
+<p align="center">
+  <img src="karaqueue/static/KaraQueue-Icon.png" alt="KaraQueue logo" width="112">
+</p>
 
-**A karaoke queue for parties.** Put the big screen up on the TV, everyone scans in with their phone, and KaraQueue keeps a fair rotation so nobody hogs the mic: everyone sings once before anyone sings twice.
+<h1 align="center">KaraQueue</h1>
+
+<p align="center">
+  <b>A karaoke queue for parties.</b><br>
+  Phones join with a QR code, the TV shows who's up, and everyone sings once before anyone sings twice.
+</p>
+
+<p align="center">
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#what-a-night-looks-like">Features</a> ·
+  <a href="docs/install.md">Install guide</a> ·
+  <a href="docs/configuration.md">Configuration</a> ·
+  <a href="#docs">Docs</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/mdbook/karaqueue/actions/workflows/test.yml"><img src="https://github.com/mdbook/karaqueue/actions/workflows/test.yml/badge.svg" alt="Tests"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--or--later-blue" alt="License: GPL-3.0-or-later"></a>
+  <img src="https://img.shields.io/badge/python-3.9%2B-blue" alt="Python 3.9+">
+  <img src="https://img.shields.io/badge/docker-compose-2496ED" alt="Runs with Docker Compose">
+</p>
+
+![The big screen: the video, who's singing, who's next, and a QR code to join](docs/screenshots/tv-split.png)
 
 No app to install, no accounts needed for guests, no karaoke-machine subscription. It runs on your own server, plays your own song library (or YouTube), and when the Wi-Fi drops for a moment, phones and screens reconnect on their own.
 
@@ -38,8 +62,6 @@ Put karaoke files in `songs`, or leave it empty to start with YouTube. Compose k
 Prefer Python? You need Python 3.9+, ffmpeg for conversions, and yt-dlp with a JavaScript runtime for YouTube downloads. Follow the [Python setup](docs/install.md#python).
 
 For guests outside your network, use https and set `KARAQUEUE_PUBLIC_URL`, see [Behind a reverse proxy](docs/install.md#behind-a-reverse-proxy). For a free dynamic DNS name or router port forwarding, see [Public access](docs/public-access.md).
-
-![The big screen: the video, who's singing, who's next, and a QR code to join](docs/screenshots/tv-split.png)
 
 ## What a night looks like
 
