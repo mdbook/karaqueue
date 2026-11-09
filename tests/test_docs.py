@@ -7,7 +7,9 @@ from karaqueue import settings
 from karaqueue.store import Store
 
 ROOT = Path(__file__).resolve().parents[1]
-DOCS = [ROOT / "README.md", ROOT / "CONTRIBUTING.md", ROOT / "SECURITY.md", ROOT / "AGENTS.md", *sorted((ROOT / "docs").glob("*.md"))]
+# AGENTS.md is only checked where it ships: the public GitHub copy leaves it out.
+DOCS = [ROOT / "README.md", ROOT / "CONTRIBUTING.md", ROOT / "SECURITY.md", *filter(Path.exists, [ROOT / "AGENTS.md"]),
+        *sorted((ROOT / "docs").glob("*.md"))]
 
 
 def test_every_setting_is_documented_and_in_the_example_env():

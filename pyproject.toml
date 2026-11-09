@@ -1,6 +1,6 @@
 [project]
 name = "karaqueue"
-version = "2.0.0"
+version = "2.1.0"
 description = "A karaoke queue for parties: rooms, a fair singer rotation and a big screen for the TV."
 readme = "README.md"
 license = { text = "GPL-3.0-or-later" }
