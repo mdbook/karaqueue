@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en" data-theme="sunset">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KaraQueue</title>
+  <link rel="stylesheet" href="{{base}}/static/style.css">
+  <style>
+    @font-face { font-family: "Bricolage Grotesque"; src: url("{{font}}") format("woff2"); font-weight: 200 800; font-stretch: 75% 100%; }
+    body { margin: 0; }
+    main { max-width: 1040px; margin: 0 auto; padding: 28px 32px 40px; }
+    header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+    header .grow { flex: 1; }
+    .pill { font-size: var(--fs-small); padding: 4px 10px; border-radius: 999px; background: var(--pill-positive-bg); color: var(--positive); }
+    .pill.off { background: var(--raised); color: var(--muted); }
+    .pill.bad { background: var(--pill-negative-bg); color: var(--negative); }
+    .grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: var(--gap); }
+    @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+    section + section, .grid section + section { margin-top: 0; }
+    .card { background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius-card); padding: var(--pad); }
+    .card h2 { margin: 0 0 6px; }
+    .card p { margin: 0 0 12px; color: var(--muted); }
+    .join { display: flex; gap: 22px; align-items: center; }
+    .qr { background: white; border-radius: 16px; padding: 12px; width: 200px; flex: none; }
+    .qr svg { display: block; width: 100%; height: auto; }
+    .address { font-family: var(--display); font-size: 1.25rem; word-break: break-all; margin: 4px 0 14px; color: var(--text); }
+    .buttons { display: flex; flex-wrap: wrap; gap: 10px; }
+    .switch { display: flex; align-items: center; gap: 12px; margin: 8px 0 14px; cursor: pointer; font-weight: 600; }
+    .switch input { appearance: none; width: 48px; height: 28px; min-height: 0; border-radius: 999px; background: var(--control); position: relative; margin: 0; cursor: pointer; flex: none; border: 0; padding: 0; }
+    .switch input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: var(--text); transition: left var(--standard) var(--ease); }
+    .switch input:checked { background: var(--accent); }
+    .switch input:checked::after { left: 23px; background: var(--button-ink); }
+    .status { font-size: var(--fs-small); }
+    .status.error { color: var(--negative); }
+    .welcome { margin-bottom: var(--gap); border-color: var(--accent); }
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); margin-top: var(--gap); }
+    .action { text-align: left; padding: 18px 20px; height: auto; display: block; border-radius: var(--radius-card); }
+    .action strong { display: block; font-size: var(--fs-section); }
+    .action span { font-weight: 400; font-size: var(--fs-small); opacity: .85; }
+    .card.folder { margin-top: var(--gap); display: flex; align-items: center; gap: 12px; }
+    .folder .path { flex: 1; color: var(--muted); word-break: break-all; font-size: var(--fs-small); }
+    footer { margin-top: 22px; font-size: var(--fs-small); color: var(--faint); display: flex; gap: 18px; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <a class="wordmark"><span class="brand-symbol" aria-hidden="true"><i></i><i></i><i></i></span>KaraQueue</a>
+    <span class="grow"></span>
+    <span class="pill" id="running">Starting</span>
+  </header>
+
+  <section class="card welcome" id="welcome" hidden>
+    <h2>Welcome! First, pick an admin password</h2>
+    <p>It's what you sign in with to host a night and change settings. Keep it long, a few random words.</p>
+    <button type="button" data-go="/setup">Pick a password</button>
+  </section>
+
+  <div class="grid">
+    <section class="card" aria-labelledby="join-title">
+      <h2 id="join-title">Guests join here</h2>
+      <p id="join-help">Phones on the same Wi-Fi can scan this.</p>
+      <div class="join">
+        <div class="qr" id="qr" role="img" aria-label="QR code for the guest address"></div>
+        <div>
+          <div class="address" id="address"></div>
+          <div class="buttons">
+            <button type="button" class="ghost small" id="copy">Copy link</button>
+            <button type="button" class="ghost small" data-browser="/">Open in browser</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="tunnel-title">
+      <h2 id="tunnel-title">Let guests in from anywhere</h2>
+      <p>A public https address, so phones on mobile data can join too. Free, no account, nothing to set up on your router.</p>
+      <label class="switch"><input type="checkbox" id="tunnel" role="switch"> <span id="tunnel-label">Public tunnel</span></label>
+      <p class="status" id="tunnel-status"></p>
+      <p class="status" id="tunnel-extra" hidden></p>
+    </section>
+  </div>
+
+  <div class="actions">
+    <button type="button" class="action" data-go="/"><strong>Host a night</strong><span>Start a room, run the queue, put the big screen on the TV.</span></button>
+    <button type="button" class="action ghost" data-go="/admin"><strong>Admin page</strong><span>Every setting, the song library, hosts and accounts.</span></button>
+  </div>
+
+  <section class="card folder" aria-label="Songs folder">
+    <div><strong>Songs folder</strong></div>
+    <div class="path" id="songs"></div>
+    <button type="button" class="ghost small" id="choose">Change</button>
+    <button type="button" class="quiet small" data-show="songs">Open</button>
+  </section>
+
+  <footer>
+    <a href="#" data-show="data">Data folder</a>
+    <a href="#" data-show="log">Log</a>
+    <a href="#" data-link="https://github.com/mdbook/karaqueue/blob/main/docs/desktop.md">Help</a>
+    <span id="port"></span>
+  </footer>
+</main>
+<script>
+  const api = () => window.pywebview.api;
+  const $ = (id) => document.getElementById(id);
+  let last = null, busy = false;
+
+  function render(s) {
+    last = s;
+    $("running").textContent = "Running";
+    $("welcome").hidden = !s.setup;
+    $("qr").innerHTML = s.qr_svg; // Server-generated QR markup.
+    $("address").textContent = s.guest;
+    const t = s.tunnel;
+    const publicUp = t.state === "up" && t.url && s.guest === t.url;
+    $("join-help").textContent = publicUp ? "Anyone can scan this, on Wi-Fi or mobile data." :
+      s.local ? "This computer isn't on a network, so phones can't reach it yet." : "Phones on the same Wi-Fi can scan this.";
+    if (!busy) $("tunnel").checked = s.tunnel_setting !== "off";
+    $("tunnel-label").textContent = t.label && s.tunnel_setting !== "off" ? t.label : "Public tunnel";
+    $("tunnel-status").className = "status" + (t.state === "error" ? " error" : "");
+    $("tunnel-status").textContent = t.state === "off" ? "Off. Guests on your Wi-Fi can still join." :
+      t.state === "up" ? (t.url ? "Up. The join link and QR codes use it now." : t.message) : t.message;
+    const extra = $("tunnel-extra");
+    extra.hidden = !(t.action || t.missing);
+    extra.replaceChildren();
+    if (t.action || t.missing) {
+      const a = document.createElement("a");
+      a.href = "#";
+      a.textContent = t.action ? "Allow it" : "Get it here";
+      a.dataset.link = t.action || t.get_it;
+      extra.append(a);
+    }
+    $("songs").textContent = s.songs || "None yet";
+    $("port").textContent = "Port " + s.port;
+  }
+
+  async function refresh() {
+    try { render(await api().status()); } catch (err) { $("running").textContent = "Not responding"; $("running").className = "pill bad"; }
+  }
+
+  // Buttons and links say what they do in data- attributes; one listener runs them all.
+  document.addEventListener("click", (e) => {
+    const el = e.target.closest("[data-go], [data-show], [data-browser], [data-link]");
+    if (!el) return;
+    e.preventDefault();
+    if (el.dataset.go) api().go(el.dataset.go);
+    else if (el.dataset.show) api().show(el.dataset.show);
+    else if (el.dataset.browser) api().browser(el.dataset.browser);
+    else api().open_link(el.dataset.link);
+  });
+  $("tunnel").addEventListener("change", async (e) => {
+    busy = true;
+    try { render(await api().set_tunnel(e.target.checked)); } finally { busy = false; }
+  });
+  $("choose").addEventListener("click", async () => render(await api().choose_songs()));
+  $("copy").addEventListener("click", async () => {
+    const text = last ? last.guest : "";
+    try { await navigator.clipboard.writeText(text); }
+    catch (err) {
+      const area = document.createElement("textarea");
+      area.value = text; document.body.append(area); area.select(); document.execCommand("copy"); area.remove();
+    }
+    $("copy").textContent = "Copied";
+    setTimeout(() => { $("copy").textContent = "Copy link"; }, 1500);
+  });
+
+  function start() { refresh(); setInterval(refresh, 2000); }
+  if (window.pywebview && window.pywebview.api) start();
+  else window.addEventListener("pywebviewready", start);
+</script>
+</body>
+</html>

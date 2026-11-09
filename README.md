@@ -11,6 +11,7 @@
 
 <p align="center">
   <a href="#quick-start">Quick start</a> ·
+  <a href="#desktop-app">Desktop app</a> ·
   <a href="#what-a-night-looks-like">Features</a> ·
   <a href="docs/install.md">Install guide</a> ·
   <a href="docs/configuration.md">Configuration</a> ·
@@ -29,6 +30,8 @@
 No app to install, no accounts needed for guests, no karaoke-machine subscription. It runs on your own server, plays your own song library (or YouTube), and when the Wi-Fi drops for a moment, phones and screens reconnect on their own.
 
 ## Quick start
+
+Just want it on your laptop for tonight? Grab the [desktop app](#desktop-app) instead: no Docker, no terminal. For a server that stays on, use Docker:
 
 You need [Docker with the Compose v2 plugin](https://docs.docker.com/compose/install/) and [Git](https://git-scm.com/downloads). Docker includes ffmpeg for conversions and yt-dlp for YouTube downloads. The Compose setup builds from source, so allow a few minutes for the first start. This repo does not yet publish a public image for a clone-free install.
 
@@ -54,6 +57,16 @@ You need [Docker with the Compose v2 plugin](https://docs.docker.com/compose/ins
    ```
 
 4. Open [localhost:8000](http://localhost:8000), choose **Host a night**, leave the name empty and sign in with your admin password. Start a room, then open its screen link on the TV. From another device, use this computer's network address instead of `localhost`, such as `http://192.168.1.10:8000`.
+
+## Desktop app
+
+KaraQueue also comes as an app for Windows, macOS (Apple silicon) and Linux, in a window of its own, with YouTube support and a one-click public tunnel built in.
+
+1. Download it from the [latest release](https://github.com/mdbook/karaqueue/releases/latest): `KaraQueue-Setup-windows-x64.exe`, `KaraQueue-macos-arm64.dmg` or `KaraQueue-linux-x64.tar.gz`.
+2. Open it. It isn't signed yet, so the first time, click **More info**, then **Run anyway** on Windows, or right-click it and choose **Open** on a Mac.
+3. Click **Pick a password** on the dashboard, then **Host a night**. Turn on **Public tunnel** to let guests join from anywhere, with a QR code that follows it.
+
+The [desktop app guide](docs/desktop.md) covers each system, where your data lives, and building it yourself.
 
 ## Configuration
 
@@ -90,6 +103,7 @@ For guests outside your network, use https and set `KARAQUEUE_PUBLIC_URL`, see [
 ## Docs
 
 - [Installing and running](docs/install.md): Docker, Python, the first run, reverse proxies, backups
+- [The desktop app](docs/desktop.md): KaraQueue as an app for Windows, macOS and Linux
 - [Configuration](docs/configuration.md): every setting, in one table
 - [Public access](docs/public-access.md): putting a home server on the internet with free dynamic DNS, router port forwarding, or a tunnel
 - [Rooms, the rotation and hosting](docs/rooms.md): how turns work, what the host can do, getting back in on a new phone

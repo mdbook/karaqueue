@@ -25,13 +25,18 @@ Issues = "https://github.com/mdbook/karaqueue/issues"
 [project.optional-dependencies]
 dev = ["pytest>=8", "httpx>=0.27"]
 ui = ["playwright>=1.40"]
+desktop = ["pywebview>=5"]
 
 [project.scripts]
 karaqueue = "karaqueue.app:main"
+karaqueue-desktop = "karaqueue.desktop:main"
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools]
+packages = ["karaqueue"]
+
 [tool.setuptools.package-data]
-karaqueue = ["static/*", "static/fonts/*"]
+karaqueue = ["static/*", "static/fonts/*", "desktop.html"]

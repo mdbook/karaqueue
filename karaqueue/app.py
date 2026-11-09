@@ -226,6 +226,19 @@ def is_local(url: str) -> bool:
     return host == "localhost" or host.endswith(".localhost") or host == "::1" or host.startswith("127.")
 
 
+def home_for_guests(tunnel_url: Optional[str], public_url: str, opened_at: str) -> str:
+    """The address guests' phones should use: a tunnel that's up, else the public address the
+    operator pinned (behind a reverse proxy the request URL can be wrong), else the address the
+    page was opened at. Opened at localhost, that's this machine's address on the network instead."""
+    home = tunnel_url or public_url or opened_at.rstrip("/")
+    if is_local(home) and not in_container():  # in a container that's the container's own address
+        lan = local_ip_for(default_gateway() or "192.0.2.1")
+        if lan:
+            port = urlsplit(home).port
+            home = f"http://{lan}" + (f":{port}" if port else "")
+    return home
+
+
 def create_app(store: Optional[Store] = None) -> FastAPI:
     setup_file = None
     if store is None:
@@ -598,16 +611,7 @@ def create_app(store: Optional[Store] = None) -> FastAPI:
         return state
 
     def guest_home(request: Request) -> str:
-        """The address guests' phones should use: a tunnel that's up, else the public address the
-        operator pinned (behind a reverse proxy the request URL can be wrong), else the address the
-        page was opened at. Opened at localhost, that's this machine's address on the network instead."""
-        home = tunnel.url() or cfg.get("public_url") or str(request.base_url).rstrip("/")
-        if is_local(home) and not in_container():  # in a container that's the container's own address
-            lan = local_ip_for(default_gateway() or "192.0.2.1")
-            if lan:
-                port = urlsplit(home).port
-                home = f"http://{lan}" + (f":{port}" if port else "")
-        return home
+        return home_for_guests(tunnel.url(), cfg.get("public_url"), str(request.base_url))
 
     @app.get("/api/rooms/{code}/join-info")
     def join_info(code: str, request: Request):
@@ -1376,16 +1380,19 @@ def create_app(store: Optional[Store] = None) -> FastAPI:
     return app
 
 
-def main() -> None:
-    import uvicorn
-
+def server_options(env=os.environ) -> dict:
+    """How uvicorn runs the app, for the `karaqueue` command and the desktop app."""
     # Client addresses come from X-Forwarded-For only when the request came from one of these
     # (comma-separated addresses or networks, or * for any). The rate limits depend on it.
     # Clients only ever send the server short JSON over the socket.
-    uvicorn.run("karaqueue.app:create_app", factory=True, ws_max_size=16 * 1024,
-                host=os.environ.get("KARAQUEUE_HOST", "0.0.0.0"),
-                port=int(os.environ.get("KARAQUEUE_PORT", "8000")),
-                proxy_headers=True,
-                forwarded_allow_ips=os.environ.get("KARAQUEUE_TRUSTED_PROXIES") or "127.0.0.1",
+    return dict(ws_max_size=16 * 1024, host=env.get("KARAQUEUE_HOST", "0.0.0.0"),
+                port=int(env.get("KARAQUEUE_PORT", "8000")), proxy_headers=True,
+                forwarded_allow_ips=env.get("KARAQUEUE_TRUSTED_PROXIES") or "127.0.0.1",
                 # A TV mid-song holds a stream open; don't let that stall a restart.
                 timeout_graceful_shutdown=5)
+
+
+def main() -> None:
+    import uvicorn
+
+    uvicorn.run("karaqueue.app:create_app", factory=True, **server_options())

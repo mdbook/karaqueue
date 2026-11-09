@@ -1,0 +1,100 @@
+name: desktop
+
+# Builds the desktop app for Windows, macOS and Linux, starts each build to check it works,
+# and on a v* tag attaches them to the GitHub release for that tag.
+on:
+  push:
+    tags: ["v*"]
+    branches: [main]
+    paths: ["desktop-build/**", "karaqueue/desktop*", ".github/workflows/desktop.yml"]
+  pull_request:
+    paths: ["desktop-build/**", "karaqueue/desktop*", ".github/workflows/desktop.yml"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows-x64
+          - os: macos-14
+            name: macos-arm64
+          - os: ubuntu-22.04
+            name: linux-x64
+    runs-on: ${{ matrix.os }}
+    env:
+      KARAQUEUE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '0.0.0-dev' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Linux libraries for the Qt window
+        if: runner.os == 'Linux'
+        run: >
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb libxkbfile1 libxkbcommon-x11-0
+          libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0
+          libxcb-xinerama0 libxcb-xfixes0 libegl1 libgl1 libnss3 libxcomposite1 libxdamage1 libxrandr2 libxtst6 libasound2 libdbus-1-3
+      - name: Python packages
+        shell: bash
+        run: |
+          pip install . pyinstaller pillow "yt-dlp[default]"
+          if [ "$RUNNER_OS" = "Linux" ]; then pip install "pywebview[qt]"; else pip install pywebview; fi
+      - run: python desktop-build/fetch_tools.py
+      - run: pyinstaller --noconfirm desktop-build/karaqueue.spec
+
+      - name: Smoke test (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a python desktop-build/smoke.py dist/KaraQueue/KaraQueue --window
+      - name: Smoke test (macOS)
+        if: runner.os == 'macOS'
+        run: python desktop-build/smoke.py dist/KaraQueue.app/Contents/MacOS/KaraQueue --window
+      - name: Smoke test (Windows)
+        if: runner.os == 'Windows'
+        run: python desktop-build/smoke.py dist/KaraQueue/KaraQueue.exe
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: mkdir release && tar -czf release/KaraQueue-${{ matrix.name }}.tar.gz -C dist KaraQueue
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: mkdir release && hdiutil create -volname KaraQueue -srcfolder dist/KaraQueue.app -ov -format UDZO release/KaraQueue-${{ matrix.name }}.dmg
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory release | Out-Null
+          Compress-Archive -Path dist/KaraQueue -DestinationPath release/KaraQueue-${{ matrix.name }}.zip
+          $version = $env:KARAQUEUE_VERSION.TrimStart("v")
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          & $iscc "/DVersion=$version" desktop-build/windows-installer.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KaraQueue-${{ matrix.name }}
+          path: release/*
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "KaraQueue $TAG" \
+              --notes "Desktop downloads for Windows, macOS (Apple silicon) and Linux. How to install: https://github.com/$GITHUB_REPOSITORY/blob/main/docs/desktop.md"
+          gh release upload "$TAG" release/* --repo "$GITHUB_REPOSITORY" --clobber

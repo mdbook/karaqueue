@@ -19,7 +19,7 @@ The KaraQueue machine reaches out to a tunnel service, and guests reach it throu
 
 On the admin page, under Settings, Tunnel, pick one:
 
-- **Cloudflare quick tunnel.** No account, nothing to sign up for. Cloudflare hands out a random address like `https://quiet-river-banana.trycloudflare.com`, and a new one each time the server starts. Great for a party. It needs the free [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) program installed.
+- **Cloudflare quick tunnel.** No account, nothing to sign up for. Cloudflare hands out a random address like `https://quiet-river-banana.trycloudflare.com`, and a new one each time the server starts. Great for a party. It needs the free [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) program installed; the [desktop app](desktop.md) comes with it.
 - **Cloudflare named tunnel.** An address on your own domain that stays the same. Make a tunnel in the [Cloudflare dashboard](https://one.dash.cloudflare.com/) (Networks, Tunnels), give it a public hostname pointing at `http://localhost:8000`, then paste its token into Cloudflare tunnel token and the hostname into Tunnel hostname.
 - **Tailscale Funnel.** A `ts.net` address that stays the same, free for personal use. Install [Tailscale](https://tailscale.com/download) and sign in on this machine first. The first time, the admin page shows a link to allow Funnel for it.
 
