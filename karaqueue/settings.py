@@ -75,6 +75,19 @@ SETTINGS = [
      "Once a room's takes add up to this, it saves no more until some are deleted."),
     ("recordings_max_gb", float, 20.0, "Recordings", "All recordings (GB)",
      "The most every room's takes can add up to. The server also always leaves 1 GB of the disk free."),
+    ("tunnel", str, "off", "Tunnel", "Tunnel",
+     "The easiest way to let guests in from anywhere: a public https address, with nothing to set up on the "
+     "router, that works on any connection. Cloudflare quick tunnel needs no account and gets a new random "
+     "address each start. While the tunnel is up, join links and QR codes use it."),
+    ("tunnel_token", str, "", "Tunnel", "Cloudflare tunnel token",
+     "Cloudflare named tunnel only: the token from the tunnel's page in the Cloudflare dashboard. Never shown "
+     "again or written to the log."),
+    ("tunnel_hostname", str, "", "Tunnel", "Tunnel hostname",
+     "Cloudflare named tunnel only: the public hostname you gave it in the dashboard, like karaoke.example.com."),
+    ("cloudflared", str, "cloudflared", "Tunnel", "cloudflared command",
+     "If it isn't on the PATH. Set by KARAQUEUE_CLOUDFLARED only, so the admin page can't make the server run a program."),
+    ("tailscale", str, "tailscale", "Tunnel", "tailscale command",
+     "If it isn't on the PATH. Set by KARAQUEUE_TAILSCALE only, so the admin page can't make the server run a program."),
     ("ddns_provider", str, "off", "Public access", "Dynamic DNS",
      "A free name like myparty.duckdns.org that follows your home internet address, so guests outside your "
      "network can reach this server. Make the name at the provider first. It also needs the port open on "
@@ -105,10 +118,10 @@ SETTINGS = [
      "Point it at an https server in front of KaraQueue, like Caddy on 443, so passwords don't travel "
      "unencrypted. Set by KARAQUEUE_FORWARD_TO_PORT only, so the admin page can't open other programs to the internet."),
 ]
-SECRET = {"youtube_api_key", "ddns_token", "ddns_url"}
+SECRET = {"youtube_api_key", "ddns_token", "ddns_url", "tunnel_token"}
 # Shown on the admin page but only changed in the environment: whoever has the admin page
 # shouldn't get to pick a program for the server to run, or open another one to the internet.
-ENV_ONLY = {"ytdlp", "forward_to_port"}
+ENV_ONLY = {"ytdlp", "forward_to_port", "cloudflared", "tailscale"}
 # Folders the admin page can point at. They have to sit inside KARAQUEUE_ALLOWED_FOLDERS, or
 # inside the folders the environment already sets, so the admin page can't read or delete
 # files anywhere else on the server.
@@ -119,7 +132,9 @@ CHOICES = {"new_rooms": {"accounts": "Account holders", "anyone": "Anyone"},
            "song_lookup": {"musicbrainz": "MusicBrainz", "off": "Off"},
            "ddns_provider": {"off": "Off", "duckdns": "DuckDNS", "noip": "No-IP", "dynu": "Dynu",
                              "freedns": "FreeDNS (afraid.org)", "custom": "Custom update URL"},
-           "port_forward": {"off": "Off", "on": "On"}}
+           "port_forward": {"off": "Off", "on": "On"},
+           "tunnel": {"off": "Off", "cloudflare": "Cloudflare quick tunnel", "cloudflare_named": "Cloudflare named tunnel",
+                      "tailscale": "Tailscale Funnel"}}
 ROLES = ("admin", "host")
 LIMITS = {"songs_per_singer": (1, 1000), "name_limit": (1, 200), "code_length": (5, 12),
           "rate_limit": (0, 100), "room_days": (0, 36500), "downloads_max_gb": (0.1, 100000), "recording_max_mb": (1, 10000),
@@ -129,6 +144,8 @@ LIMITS = {"songs_per_singer": (1, 1000), "name_limit": (1, 200), "code_length": 
           "forward_to_port": (0, 65535)}
 # Settings the public access updater reads: changing one makes it look again right away.
 PUBLIC_ACCESS = {key for key, *_ in SETTINGS if key.startswith("ddns_")} | {"port_forward", "router_port"}
+# Settings the tunnel reads: changing one starts, stops or restarts it.
+TUNNEL = {"tunnel", "tunnel_token", "tunnel_hostname"}
 # Dot-separated labels of 1 to 63 letters, digits and inner hyphens.
 HOSTNAME = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$")
 # Read once at startup, so they're shown on the admin page but changed only in the environment.
@@ -172,7 +189,7 @@ def _coerce(key: str, value: Any) -> Any:
         value = value.rstrip("/")
         if value and not value.startswith(("http://", "https://")):
             raise Error("The public address must start with http:// or https://")
-    if key == "ddns_hostname":
+    if key in ("ddns_hostname", "tunnel_hostname"):
         value = value.lower().rstrip(".")
         if value and (len(value) > 253 or not HOSTNAME.match(value)):
             raise Error("Type just the hostname, like myparty.duckdns.org")

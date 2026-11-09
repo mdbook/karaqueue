@@ -14,6 +14,7 @@ KaraQueue is deliberately small: one Python process, one SQLite file, and plain 
 | `karaqueue/downloads.py` | yt-dlp: the downloads cache, search without an API key, and saving songs into the library. |
 | `karaqueue/youtube.py` | Pulling a video id out of whatever people paste, and YouTube Data API search. |
 | `karaqueue/public.py` | Public access: dynamic DNS updates (DuckDNS, No-IP, Dynu, FreeDNS, any update URL), router port forwarding (UPnP, NAT-PMP, PCP) and spotting carrier-grade NAT, in a background thread. Standard library only. |
+| `karaqueue/tunnel.py` | Tunnels: runs cloudflared (a quick or named tunnel) or `tailscale funnel` as a child process, reads the public https address it prints, restarts it if it stops. Join links use that address while the tunnel is up. |
 | `karaqueue/limits.py` | Per-address rate limits. |
 | `karaqueue/guards.py` | Security headers, request size caps and slowing down password guessing. |
 | `karaqueue/static/` | The pages: `index.html` (home), `room.html` (guests), `host.html`, `screen.html` (TVs), `admin.html`, plus shared `kq.js`, the CD+G renderer `kq-cdg.js` and the styles. |

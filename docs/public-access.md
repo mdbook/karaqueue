@@ -1,13 +1,33 @@
 # Public access
 
-Guests on your wifi can always reach KaraQueue. For guests on their phone's data, or a party somewhere else, the server needs an address on the internet. If you run it at home with no domain of your own, the admin page can do most of that for you, under Settings, Public access:
+Guests on your wifi can always reach KaraQueue. For guests on their phone's data, or a party somewhere else, the server needs an address on the internet.
+
+The easy way is a [tunnel](#a-tunnel-the-easy-way): one setting, and the server gets a public https address that works on any internet connection, with nothing to set up on the router. The join link and QR code switch to it on their own.
+
+If you'd rather have a name of your own that stays the same, and your router lets you, the admin page can set that up too, under Settings, Public access:
 
 1. **A name that follows you.** Home internet addresses change now and then. A free dynamic DNS name, like `myparty.duckdns.org`, always points at your current one, and KaraQueue keeps it up to date.
 2. **A way in through your router.** Your router turns away visits from the internet unless you tell it to send them to KaraQueue. That's a port forward, and KaraQueue can ask the router for one.
 
 Both are off until you turn them on. With them off, KaraQueue never contacts any of these services.
 
-If your internet provider uses carrier-grade NAT, neither will work, and you want a [tunnel](#when-it-cant-work-use-a-tunnel) instead. The admin page tells you when it looks that way.
+If your internet provider uses carrier-grade NAT, neither will work, and you want a [tunnel](#a-tunnel-the-easy-way) instead. The admin page tells you when it looks that way.
+
+## A tunnel, the easy way
+
+The KaraQueue machine reaches out to a tunnel service, and guests reach it through there. That needs no port forward and no dynamic DNS, works behind carrier-grade NAT, and comes with https, so the mic, casting and speaker picking work on screens outside your network too.
+
+On the admin page, under Settings, Tunnel, pick one:
+
+- **Cloudflare quick tunnel.** No account, nothing to sign up for. Cloudflare hands out a random address like `https://quiet-river-banana.trycloudflare.com`, and a new one each time the server starts. Great for a party. It needs the free [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) program installed.
+- **Cloudflare named tunnel.** An address on your own domain that stays the same. Make a tunnel in the [Cloudflare dashboard](https://one.dash.cloudflare.com/) (Networks, Tunnels), give it a public hostname pointing at `http://localhost:8000`, then paste its token into Cloudflare tunnel token and the hostname into Tunnel hostname.
+- **Tailscale Funnel.** A `ts.net` address that stays the same, free for personal use. Install [Tailscale](https://tailscale.com/download) and sign in on this machine first. The first time, the admin page shows a link to allow Funnel for it.
+
+The Tunnel status under the setting shows the address once it's up, with a QR code to try from a phone. While it's up, join links and QR codes everywhere use it, even over a Public address you set yourself. If the tunnel program stops, KaraQueue starts it again, waiting a little longer each time.
+
+In Docker, the image doesn't include cloudflared or tailscale. Run the tunnel as its own container instead, like [cloudflared's](https://hub.docker.com/r/cloudflare/cloudflared), and set Public address to its https address.
+
+Quick tunnels are meant for trying things out, so Cloudflare gives no guarantees for them. For a server that stays up all the time, use a named tunnel or Tailscale.
 
 ## Step 1: a dynamic DNS name
 
@@ -77,12 +97,7 @@ KaraQueue asks your router for its internet address and warns you on the admin p
 - the router's address is a home network one (`10.x`, `172.16.x` to `172.31.x`, `192.168.x`), so there's another router in front of yours, or
 - the router's address isn't the one the internet sees.
 
-In those cases, use a tunnel instead. The KaraQueue machine reaches out to the tunnel service, and guests reach it through there, with https included, and no port forward or dynamic DNS needed:
-
-- [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/), free, needs a domain on Cloudflare. Point the tunnel at `http://localhost:8000`.
-- [Tailscale Funnel](https://tailscale.com/kb/1223/funnel), free for personal use, gives you a `ts.net` address. Run `tailscale funnel 8000`.
-
-Then set Public address on the admin page to the tunnel's https address, and turn Dynamic DNS and Open the port on the router off. The tunnel connects from the same machine, so the default `KARAQUEUE_TRUSTED_PROXIES` sees each guest's real address if the tunnel passes it on in `X-Forwarded-For`.
+In those cases, turn on a [tunnel](#a-tunnel-the-easy-way) instead, and turn Dynamic DNS and Open the port on the router off. A tunnel you run yourself works too: point it at `http://localhost:8000` and set Public address to its https address. The tunnel connects from the same machine, so the default `KARAQUEUE_TRUSTED_PROXIES` sees each guest's real address if the tunnel passes it on in `X-Forwarded-For`.
 
 ## Keeping it safe on the internet
 

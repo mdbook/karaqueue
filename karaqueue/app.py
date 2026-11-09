@@ -32,8 +32,9 @@ from .downloads import search as ytdlp_search
 from .guards import Logins, Protect
 from .limits import SOCKETS, Limiter
 from .media import Library, lookup, naming_rule
-from .public import PublicAccess, listen_port
-from .settings import PUBLIC_ACCESS, RULES_KEY, SECRET, Settings, _scrypt, env_name, hash_password, password_matches
+from .public import PublicAccess, default_gateway, in_container, listen_port, local_ip_for
+from .tunnel import Tunnel
+from .settings import PUBLIC_ACCESS, RULES_KEY, TUNNEL, SECRET, Settings, _scrypt, env_name, hash_password, password_matches
 from .store import CLAIM_SECONDS, Error, NoRoom, Store
 
 log = logging.getLogger("karaqueue")
@@ -220,6 +221,11 @@ def client_address(host: str) -> str:
     return str(ip)
 
 
+def is_local(url: str) -> bool:
+    host = urlsplit(url).hostname or ""
+    return host == "localhost" or host.endswith(".localhost") or host == "::1" or host.startswith("127.")
+
+
 def create_app(store: Optional[Store] = None) -> FastAPI:
     setup_file = None
     if store is None:
@@ -230,19 +236,23 @@ def create_app(store: Optional[Store] = None) -> FastAPI:
     # Dynamic DNS and the router port forward, in a thread that runs while the server does.
     # The store keeps any forward still on the router, so one left by a crash comes off next start.
     public = PublicAccess(cfg.get, listen_port(), store)
+    tunnel = Tunnel(cfg.get)  # a cloudflared or tailscale child process, while the server runs
 
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI):
         public.start()
+        tunnel.start()
         try:
             yield
         finally:
+            await asyncio.to_thread(tunnel.stop)
             await asyncio.to_thread(public.stop)  # takes the port forward off the router
 
     app = FastAPI(title="KaraQueue", lifespan=lifespan)
     app.add_middleware(Protect, static=STATIC)
     app.state.settings = cfg
     app.state.public = public
+    app.state.tunnel = tunnel
     hub = Hub(store)
     app.state.hub = hub  # tests wait on it for sockets to finish closing
     app.state.open_sockets = 0  # sockets whose handler hasn't finished hub.disconnect yet
@@ -587,16 +597,26 @@ def create_app(store: Optional[Store] = None) -> FastAPI:
                 np["cdg"] = True  # the screen draws the lyrics itself
         return state
 
+    def guest_home(request: Request) -> str:
+        """The address guests' phones should use: a tunnel that's up, else the public address the
+        operator pinned (behind a reverse proxy the request URL can be wrong), else the address the
+        page was opened at. Opened at localhost, that's this machine's address on the network instead."""
+        home = tunnel.url() or cfg.get("public_url") or str(request.base_url).rstrip("/")
+        if is_local(home) and not in_container():  # in a container that's the container's own address
+            lan = local_ip_for(default_gateway() or "192.0.2.1")
+            if lan:
+                port = urlsplit(home).port
+                home = f"http://{lan}" + (f":{port}" if port else "")
+        return home
+
     @app.get("/api/rooms/{code}/join-info")
     def join_info(code: str, request: Request):
         room = store.state(code)["code"]
-        # Behind a reverse proxy the request URL can be wrong, so let the operator pin it.
-        home = cfg.get("public_url") or str(request.base_url).rstrip("/")
+        home = guest_home(request)
         link = f"{home}/r/{room}"
-        # Opened at localhost, the QR code points guests' phones at themselves. The pages say so.
-        host = urlsplit(home).hostname or ""
-        local = host == "localhost" or host.endswith(".localhost") or host == "::1" or host.startswith("127.")
-        return {"home": home, "link": link, "local": local,
+        # Opened at localhost with no other address to use, the QR code points guests' phones at
+        # themselves. The pages say so.
+        return {"home": home, "link": link, "local": is_local(home),
                 "qr_svg": segno.make(link).svg_inline(border=2, omitsize=True)}
 
     @app.get("/api/rooms/{code}/host")
@@ -631,7 +651,7 @@ def create_app(store: Optional[Store] = None) -> FastAPI:
         """The host, or the singer themselves, gets a one-time link to sign another phone in as them.
         The code rides after the #, so it never reaches a proxy's logs."""
         claim = store.claim_link(code, tok, singer_id)
-        home = cfg.get("public_url") or str(request.base_url).rstrip("/")
+        home = guest_home(request)
         link = f"{home}/r/{code.upper()}#claim={claim}"
         return {"claim": claim, "link": link, "minutes": CLAIM_SECONDS // 60,
                 "qr_svg": segno.make(link).svg_inline(border=2, omitsize=True)}
@@ -917,7 +937,7 @@ def create_app(store: Optional[Store] = None) -> FastAPI:
                 "password_env": cfg.password_from_env(), "users": store.users(), "guests": store.guests(),
                 "sessions": store.sessions(), "invites": store.invites(),
                 "library": lib.counts() if lib else None,
-                "downloads": dl.usage() if dl else None, "public": public.status()}
+                "downloads": dl.usage() if dl else None, "public": public.status(), "tunnel": tunnel.status()}
 
     @app.get("/api/admin")
     def admin_get(who: dict = Depends(admin)):
@@ -1012,6 +1032,8 @@ def create_app(store: Optional[Store] = None) -> FastAPI:
         if key in PUBLIC_ACCESS:
             public.look()
             public.poke()  # and the thread works out its next look from the new settings
+        if key in TUNNEL:
+            tunnel.changed()
 
     @app.post("/api/admin/public/check", dependencies=[Depends(admin)])
     def admin_public_check():

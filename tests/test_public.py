@@ -355,7 +355,6 @@ def test_updater_warns_behind_carrier_grade_nat(web):
     web[1].append((200, "OK"))
     pa.check()
     assert "carrier-grade" in pa.status()["warning"]
-    assert set(pa.status()["tunnels"]) == {"Cloudflare Tunnel", "Tailscale Funnel"}
 
 
 def test_port_forward_opens_renews_moves_and_comes_off(web):

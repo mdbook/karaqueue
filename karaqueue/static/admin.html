@@ -356,6 +356,7 @@
               flash("Downloads cleared", "ok");
             }) }, "Clear downloads"))));
     }
+    if (group === "Tunnel") return tunnelStatus(data);
     if (group === "Public access") return publicStatus(data);
     return null;
   }
@@ -364,6 +365,45 @@
 
   const PUBLIC_DOCS = "https://github.com/mdbook/karaqueue/blob/main/docs/public-access.md";
   const outLink = (href, text) => h("a", { href, target: "_blank", rel: "noopener" }, text);
+
+  // ---- Tunnel: what the tunnel program said last ----
+
+  let tunnelTimer = null;
+
+  function tunnelStatus(data) {
+    const t = data.tunnel;
+    const body = [];
+    if (t.state === "off") {
+      body.push(h("p", { class: "item-help" },
+        "Off. Pick Cloudflare quick tunnel above for a public https address in one click, no account needed."));
+    } else if (t.state === "up") {
+      body.push(h("p", { class: "item-help" }, t.label + " is up."));
+      if (t.url) {
+        const qr = h("div", { class: "move-qr", role: "img", "aria-label": "QR code for " + t.url });
+        qr.innerHTML = t.qr_svg; // Server-generated QR markup.
+        body.push(h("div", { class: "row" }, h("span", {}, "Guests can use ", outLink(t.url, t.url)),
+          h("button", { class: "ghost small", type: "button", onclick: act(async () => {
+            await navigator.clipboard.writeText(t.url);
+            flash("Copied", "ok");
+          }) }, "Copy")), qr,
+          h("p", { class: "item-help" }, "Join links and QR codes use it while it's up."));
+      } else body.push(h("p", { class: "item-help" }, t.message));
+    } else {
+      body.push(h("p", { class: t.state === "error" ? "error" : "item-help" }, t.message));
+      if (t.action) body.push(h("div", { class: "row" }, outLink(t.action, "Allow it")));
+      if (t.missing) body.push(h("p", { class: "item-help" }, "Install it from ", outLink(t.get_it, t.get_it),
+        ", or set where it is in the environment."));
+    }
+    // Starting takes a few seconds: look again until it's up or fails.
+    clearTimeout(tunnelTimer);
+    if (t.state === "starting") tunnelTimer = setTimeout(async () => {
+      try { render(await call("GET", "")); } catch (err) { /* the next save or reload shows it */ }
+    }, 2000);
+    return h("div", { class: "item" },
+      h("div", { class: "item-text" }, h("span", { class: "item-label" }, "Status"),
+        h("p", { class: "item-help" }, outLink(PUBLIC_DOCS + "#a-tunnel-the-easy-way", "How tunnels work"))),
+      h("div", { class: "item-body" }, ...body));
+  }
 
   function publicStatus(data) {
     const p = data.public;
@@ -394,8 +434,7 @@
     if (p.plain_auth) lines.push(h("p", { class: "error" },
       "The custom update URL is plain http, so the token (and the username and password, if set) travel unencrypted. " +
       "Use the provider's https address if it has one."));
-    if (p.warning) lines.push(h("p", { class: "error" }, p.warning, " Try ",
-      Object.entries(p.tunnels).map(([name, href], i) => [i ? " or " : "", outLink(href, name)]), "."));
+    if (p.warning) lines.push(h("p", { class: "error" }, p.warning, " Turn on a Tunnel, above, instead."));
     if (p.url) {
       const current = (data.settings.find((s) => s.key === "public_url") || {}).value;
       lines.push(h("div", { class: "row" }, h("span", {}, "Guests can use ", outLink(p.url, p.url)),

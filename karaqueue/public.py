@@ -40,8 +40,6 @@ SWEEP = 300  # how soon to try again to take a stale forward off the router
 DESCRIPTION = "KaraQueue"  # how our forwards are named on the router, to tell them from others
 FORWARDS_KEY = "public:forwards"  # in the store: forwards that may still be on the router
 HTTP_ERRORS = (OSError, http.client.HTTPException, ValueError)
-TUNNEL_DOCS = {"Cloudflare Tunnel": "https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/",
-               "Tailscale Funnel": "https://tailscale.com/kb/1223/funnel"}
 
 
 # ---- dynamic DNS providers ---------------------------------------------------------------
@@ -875,7 +873,7 @@ class PublicAccess:
                       and bool(conf["username"] or conf["token"]))
         return {**state, "on": on, "provider": conf["provider"], "listen_port": self.listen_port,
                 "target_port": conf["target_port"], "url": url, "plain_http": on and port != 443,
-                "plain_auth": plain_auth, "tunnels": TUNNEL_DOCS}
+                "plain_auth": plain_auth}
 
     # -- the thread ---------------------------------------------------------------
 

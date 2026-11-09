@@ -4,6 +4,7 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
+from karaqueue import app as app_module
 from karaqueue import displays
 from karaqueue.app import create_app
 from karaqueue.store import Store
@@ -49,7 +50,7 @@ def sockets(client, code, count):
                 pytest.fail("the server did not finish closing the sockets within 5 s")
 
 
-def test_a_night_of_karaoke():
+def test_a_night_of_karaoke(monkeypatch):
     client = TestClient(create_app(Store()))
     room = client.post("/api/rooms", json={"name": "Friday"}).json()
     code, host = room["code"], bearer(room["host_token"])
@@ -76,7 +77,13 @@ def test_a_night_of_karaoke():
     info = client.get(f"/api/rooms/{code}/join-info").json()
     assert info["link"].endswith(f"/r/{code}")
     assert info["qr_svg"].startswith("<svg") and info["local"] is False
-    local = TestClient(client.app, base_url="http://127.0.0.1:8000").get(f"/api/rooms/{code}/join-info").json()
+    at_home = TestClient(client.app, base_url="http://127.0.0.1:8000")
+    monkeypatch.setattr(app_module, "in_container", lambda: False)
+    monkeypatch.setattr(app_module, "local_ip_for", lambda host: "192.168.1.20")
+    lan = at_home.get(f"/api/rooms/{code}/join-info").json()
+    assert lan["link"] == f"http://192.168.1.20:8000/r/{code}" and lan["local"] is False  # phones on the Wi-Fi can follow it
+    monkeypatch.setattr(app_module, "local_ip_for", lambda host: None)
+    local = at_home.get(f"/api/rooms/{code}/join-info").json()
     assert local["local"] is True  # the pages warn that phones can't follow this QR code
 
 
