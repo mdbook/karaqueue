@@ -9,6 +9,7 @@ import secrets
 import sqlite3
 import threading
 import time
+import unicodedata
 from typing import Optional
 
 TAKE_WINDOW = 15 * 60  # seconds after a song ends that a screen can still save its recording
@@ -152,8 +153,28 @@ def _hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
+ZWJ = "\N{ZERO WIDTH JOINER}"  # U+200D
+
+
+def _tidy(value: Optional[str]) -> str:
+    """Names and titles as one canonical text: composed accents and look-alike forms (full-width
+    letters, ligatures) folded together, invisible characters (zero-width spaces, joiners) dropped,
+    runs of whitespace made one space. "José" typed two ways is the same string."""
+    value = unicodedata.normalize("NFKC", value or "")
+    # U+200D joins the parts of one emoji (family, flags of people), so it stays; other invisible
+    # controls and format characters go.
+    value = "".join(" " if c.isspace() else c for c in value
+                    if c == ZWJ or unicodedata.category(c) not in ("Cc", "Cf") or c.isspace())
+    return " ".join(value.split())
+
+
+def _same(a: str, b: str) -> bool:
+    """Whether two cleaned names are the same person: SQLite's NOCASE only knows ASCII letters."""
+    return a.casefold() == b.casefold()
+
+
 def _clean(value: str, field: str, limit: int, optional: bool = False) -> str:
-    value = " ".join((value or "").split())
+    value = _tidy(value)
     if not value and not optional:
         raise Error(f"{field} is required")
     if len(value) > limit:
@@ -363,12 +384,21 @@ class Store:
                     "now_playing": current, "up_next": up_next, "rotation": rotation, "options": options}
 
     def queued_videos(self, code: str) -> list:
-        """YouTube ids of every song still waiting in the room, so the server can fetch them ahead."""
+        """YouTube ids of every song still waiting in the room, in the order they will be sung (the
+        rotation from whoever is next, one song per singer per round; hidden singers last), so the
+        server can fetch the one that plays next first."""
         with self.lock:
             room = self._room(code)
-            return [r["video_id"] for r in self.db.execute(
-                "SELECT video_id FROM songs WHERE room_id = ? AND status = 'queued' AND video_id IS NOT NULL",
-                (room["id"],))]
+            singers = self._rotation(room["id"])
+            ids = [s["id"] for s in singers]
+            start = ids.index(room["last_singer_id"]) + 1 if room["last_singer_id"] in ids else 0
+            singers = singers[start:] + singers[:start]
+            lists = [[r["video_id"] for r in self._queued(s["id"])] for s in singers if not s["hidden"]]
+            lists += [[r["video_id"] for r in self._queued(s["id"])] for s in singers if s["hidden"]]
+            order = []
+            for round_ in range(max(map(len, lists), default=0)):
+                order += [songs[round_] for songs in lists if round_ < len(songs)]
+            return [v for v in order if v]
 
     def host_state(self, code: str, token: Optional[str]) -> dict:
         """Everything, including every singer's full list and hidden singers."""
@@ -516,6 +546,15 @@ class Store:
 
     # -- user accounts (passwords arrive already hashed) ---------------------------
 
+    def _named(self, table: str, name: str, not_id: Optional[int] = None):
+        """The row in `table` ("users" or "guests") whose name is the same person as `name`
+        (same NFKC + casefold check as singers; SQLite's NOCASE only folds a-z), or None."""
+        name = _tidy(name)
+        for row in self.db.execute(f"SELECT * FROM {table}"):
+            if row["id"] != not_id and _same(_tidy(row["name"]), name):
+                return row
+        return None
+
     def users(self) -> list:
         with self.lock:
             rows = self.db.execute("SELECT id, name, role, disabled, created_at, seen_at FROM users "
@@ -525,13 +564,13 @@ class Store:
     def user(self, user_id: Optional[int] = None, name: Optional[str] = None) -> Optional[dict]:
         with self.lock:
             row = (self._one("SELECT * FROM users WHERE id = ?", user_id) if user_id is not None
-                   else self._one("SELECT * FROM users WHERE name = ? COLLATE NOCASE", name))
+                   else self._named("users", name))
             return dict(row) if row else None
 
     def add_user(self, name: str, role: str, password: str) -> int:
         name = _clean(name, "Name", self.name_limit)
         with self.lock, self.db:
-            if self._one("SELECT 1 FROM users WHERE name = ? COLLATE NOCASE", name):
+            if self._named("users", name):
                 raise Error("There's already an account with that name", 409)
             return self.db.execute("INSERT INTO users (name, role, password, created_at) VALUES (?, ?, ?, ?)",
                                    (name, role, password, time.time())).lastrowid
@@ -544,8 +583,7 @@ class Store:
         with self.lock, self.db:
             if not self._one("SELECT 1 FROM users WHERE id = ?", user_id):
                 raise Error("No such account", 404)
-            if "name" in fields and self._one("SELECT 1 FROM users WHERE name = ? COLLATE NOCASE AND id != ?",
-                                              fields["name"], user_id):
+            if "name" in fields and self._named("users", fields["name"], not_id=user_id):
                 raise Error("There's already an account with that name", 409)
             for key, value in fields.items():
                 self.db.execute(f"UPDATE users SET {key} = ? WHERE id = ?", (value, user_id))
@@ -672,14 +710,14 @@ class Store:
     def add_guest(self, name: str, password: str) -> int:
         name = _clean(name, "Name", self.name_limit)
         with self.lock, self.db:
-            if self._one("SELECT 1 FROM guests WHERE name = ? COLLATE NOCASE", name):
+            if self._named("guests", name):
                 raise Error("That name is taken. Sign in if it's yours, or pick another.", 409)
             return self.db.execute("INSERT INTO guests (name, password, created_at) VALUES (?, ?, ?)",
                                    (name, password, time.time())).lastrowid
 
     def guest(self, guest_id: Optional[int] = None, name: Optional[str] = None) -> Optional[dict]:
         row = self._one("SELECT * FROM guests WHERE id = ?", guest_id) if guest_id is not None else \
-            self._one("SELECT * FROM guests WHERE name = ? COLLATE NOCASE", " ".join((name or "").split()))
+            self._named("guests", name)
         return dict(row) if row else None
 
     def guests(self) -> list:
@@ -790,8 +828,7 @@ class Store:
                         mine = self._one("SELECT id, name FROM singers WHERE id = ?", singer_id)
                 if mine:
                     return {"singer_id": mine["id"], "name": mine["name"], "token": self._device(mine["id"])}
-            if self._one("SELECT 1 FROM singers WHERE room_id = ? AND name = ? COLLATE NOCASE",
-                         room["id"], name):
+            if any(_same(s["name"], name) for s in self._rotation(room["id"])):
                 raise Error("Someone in this room already has that name. If that's you, tap Tie this spot to an account on the "
                             "phone you joined with, or ask the host to sign this phone in from your name." if guest else
                             "Someone in this room already has that name", 409)

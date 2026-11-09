@@ -218,3 +218,87 @@ def test_the_artist_is_optional_but_the_title_is_not(room):
     assert store.me(code, alex)["songs"][0]["artist"] == ""
     with pytest.raises(Error):
         store.add_song(code, alex, " ", "Toto")
+
+
+# ---- C11: the same name typed a different way is the same name ----
+
+def test_names_that_differ_only_in_accents_form_case_or_invisible_characters_are_one_singer(room):
+    store, code, host = room
+    assert store.join(code, "José")["name"] == "José"
+    for twin in ("José", "JOSÉ", "josé", "  José  ", "Jos​é", "Ｊｏｓé"):
+        with pytest.raises(Error) as err:
+            store.join(code, twin)
+        assert err.value.status == 409, twin
+    assert store.join(code, "Jose")["name"] == "Jose"  # a different name, not a twin
+    assert [s["name"] for s in store.state(code)["rotation"]] == ["José", "Jose"]
+
+
+def test_non_ascii_case_counts_as_the_same_name(room):
+    store, code, host = room
+    store.join(code, "Élodie")
+    with pytest.raises(Error):
+        store.join(code, "élodie")  # SQLite's NOCASE alone only folds a-z
+
+
+def test_staff_and_guest_accounts_fold_names_like_singers_do(room):
+    store, code, host = room
+    uid = store.add_user("Élodie", "host", "pw")
+    for twin in ("élodie", "ÉLODIE", " Élodie "):
+        with pytest.raises(Error) as err:
+            store.add_user(twin, "host", "pw")
+        assert err.value.status == 409, twin
+    assert store.user(name="élodie")["id"] == uid  # signing in with other casing still finds it
+    other = store.add_user("Zoë", "host", "pw")
+    with pytest.raises(Error):
+        store.update_user(other, name="élodie")
+    store.update_user(uid, name="ÉLODIE")  # renaming to its own name in another case is fine
+    gid = store.add_guest("Élodie", "pw")
+    with pytest.raises(Error) as err:
+        store.add_guest("élodie", "pw")
+    assert err.value.status == 409
+    assert store.guest(name="ÉLODIE")["id"] == gid
+
+
+def test_a_joiner_survives_in_names_but_other_invisible_characters_do_not(room):
+    store, code, host = room
+    family = "👨‍👩‍👧"
+    assert store.join(code, family)["name"] == family
+    assert store.join(code, "Al​ex⁠")["name"] == "Alex"
+
+
+def test_song_titles_are_stored_in_one_form(room):
+    store, code, host = room
+    alex = join(store, code, "Alex")
+    song = store.add_song(code, alex, "Café​  Song", "Béyoncé")
+    shown = store.me(code, alex)["songs"][0]
+    assert (shown["title"], shown["artist"]) == ("Café Song", "Béyoncé")
+
+
+# ---- C12: every screen has its own secret ----
+
+def test_a_screens_key_only_opens_that_screen(room):
+    store, code, host = room
+    one, two = store.pair_screen(code, "tv-one"), store.pair_screen(code, "tv-two")
+    assert one != two
+    assert store.screen(code, "tv-one", one) is not None and store.screen(code, "tv-two", two) is not None
+    assert store.screen(code, "tv-two", one) is None and store.screen(code, "tv-one", two) is None
+    assert store.screen(code, "tv-three", one) is None
+    other = store.create_room("Saturday")["code"]
+    assert store.screen(other, "tv-one", one) is None  # nor does it open the same id in another room
+    store.pair_screen(code, "tv-one")
+    assert store.screen(code, "tv-one", one) is None  # pairing again replaces the old key
+
+
+# ---- C4: downloads go in the order songs will be sung ----
+
+def test_queued_videos_come_in_singing_order(room):
+    store, code, host = room
+    alex, sam = join(store, code, "Alex"), join(store, code, "Sam")
+    ids = {"a1": "aaaaaaaaaa1", "a2": "aaaaaaaaaa2", "s1": "sssssssss11", "s2": "sssssssss12"}
+    for who, tok in (("a", alex), ("s", sam)):
+        for n in (1, 2):
+            store.add_song(code, tok, f"{who}{n}", "x", video_id=ids[f"{who}{n}"])
+    # Sam queued after Alex, but Alex's second song is not next: it is Sam's first.
+    assert store.queued_videos(code) == [ids["a1"], ids["s1"], ids["a2"], ids["s2"]]
+    store.next(code, host)  # Alex sings; Sam is up
+    assert store.queued_videos(code) == [ids["s1"], ids["a2"], ids["s2"]]

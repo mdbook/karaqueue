@@ -4,19 +4,17 @@ KaraQueue is one Python process with a SQLite database. Run it in Docker (easies
 
 ## Docker Compose
 
-```bash
-git clone https://github.com/mdbook/karaqueue
-cd karaqueue
-cp .env.example .env      # then fill in what you want, every line is optional
-mkdir songs               # or point compose.yaml at your karaoke folder
-docker compose up -d
-```
+Follow the [README quick start](../README.md#quick-start): install Docker with Compose v2 and Git, clone the repo, copy `.env.example` to `.env`, set your admin password, and run `docker compose up -d`.
 
-The `env_file` line in `compose.yaml` needs Docker Compose 2.24 or newer; on an older one, delete the `required: false` part and keep a `.env` file next to it.
+Keep `.env` next to `compose.yaml`, even if it is empty. The file is required, but every setting in it is optional. Compose uses the simple `env_file` syntax, so it does not need Compose 2.24's optional-file support.
 
-Then pick an admin password (see [The first time](#the-first-time)) and open `http://localhost:8000`. Your songs go in `./songs` (or change the mount in [`compose.yaml`](../compose.yaml)), and everything else (the database, recordings and downloaded songs) lives in the `karaqueue-data` volume.
+Compose builds locally and includes ffmpeg and yt-dlp. No public image is published by this repo's GitHub workflow yet; this is not a registry-only install. Your songs go in `./songs` (or change the mount in [`compose.yaml`](../compose.yaml)). The database, recordings and downloaded songs live in the `karaqueue-data` volume. The library, downloads and recordings folders are enabled by default in Compose; override their `KARAQUEUE_` settings in `.env` if needed.
+
+Open `http://localhost:8000` and sign in with the admin password, leaving the name empty. If you left the password unset, see [The first time](#the-first-time).
 
 ## Plain Docker
+
+From a checkout of this repo, build and run the image:
 
 ```bash
 docker build -t karaqueue .
@@ -32,20 +30,32 @@ Drop the `-v /path/to/karaoke...` and `KARAQUEUE_MEDIA_DIR` lines if you don't h
 
 ## Python
 
-Python 3.9 or newer:
+You need Git and Python 3.9 or newer with venv support. Install [ffmpeg](https://ffmpeg.org) for converting library files and tidying recordings. For YouTube downloads you also need yt-dlp with a JavaScript runtime; Docker includes both tools.
+
+Get the source and install it in a virtual environment:
 
 ```bash
-pip install .
-karaqueue
+git clone https://github.com/mdbook/karaqueue
+cd karaqueue
+python3 -m venv .venv
+.venv/bin/pip install .
 ```
 
-For library files that need converting (AVI, MPG and friends), and for tidying recordings, install [ffmpeg](https://ffmpeg.org). For YouTube downloads, install [yt-dlp](https://github.com/yt-dlp/yt-dlp) with a JavaScript runtime: `pip install "yt-dlp[default,deno]"`. See [Your songs](library.md).
+For YouTube downloads, also run `.venv/bin/pip install "yt-dlp[default,deno]"`. See [Your songs](library.md).
+
+Start the server, then follow [The first time](#the-first-time) to pick an admin password:
+
+```bash
+.venv/bin/karaqueue
+```
+
+Unlike Compose, the Python command does not read `.env`; export any `KARAQUEUE_` settings in your shell before starting it.
 
 ## The first time
 
 You need an admin password. Either:
 
-- start the server with `KARAQUEUE_ADMIN_PASSWORD=...`, or
+- set `KARAQUEUE_ADMIN_PASSWORD` to your own password (at least 8 characters) in `.env` for Compose, or in the environment for Python or plain Docker, then start the server, or
 - open the one-time setup link the server writes to `admin-setup-link.txt` next to its database. With Docker: `docker exec karaqueue cat /data/admin-setup-link.txt`. If `KARAQUEUE_PUBLIC_URL` isn't set, the link starts at `/admin#setup=`, so put your server's address in front, like `http://localhost:8000/admin#setup=...`.
 
 The server never prints the link to its log, since logs often end up where other people can read them. The file goes away once you've picked a password.
@@ -79,6 +89,22 @@ KARAQUEUE_TRUSTED_PROXIES=172.18.0.0/16   # your proxy's address or network; * t
 Only use `*` when nothing but the proxy can reach KaraQueue, or anyone can pick the address they're limited by.
 
 https matters for more than the padlock: browsers only allow the speaker picker, the mic, second monitors and casting on https pages (or on `localhost`). See [Screens](screens.md).
+
+### https at home with Caddy
+
+KaraQueue doesn't get certificates itself; Caddy does it for you, for free, and renews them. With a dynamic DNS name from [Public access](public-access.md), like `myparty.duckdns.org`:
+
+1. Install [Caddy](https://caddyserver.com/docs/install) on the same machine as KaraQueue.
+2. Put this in its `Caddyfile`:
+
+   ```
+   myparty.duckdns.org {
+       reverse_proxy localhost:8000
+   }
+   ```
+
+3. Forward ports 80 and 443 on your router to this machine, by hand (Caddy needs both to get its certificate). Leave KaraQueue's Open the port on the router off: it forwards to KaraQueue itself, which would skip Caddy.
+4. Set Public address on the admin page to `https://myparty.duckdns.org`, and `KARAQUEUE_TRUSTED_PROXIES=127.0.0.1` (the default) already trusts Caddy on the same machine.
 
 ## Backups
 

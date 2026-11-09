@@ -5,6 +5,8 @@ recorded with its music, has no ads, and keeps playing if the internet drops.
 """
 from __future__ import annotations
 
+import heapq
+import itertools
 import json
 import logging
 import os
@@ -41,10 +43,16 @@ class Downloads:
         self.command = command
         self.fmt = fmt
         self.max_bytes = max_bytes
-        self.pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="yt-dlp")
         self.lock = threading.Lock()
+        self.wake = threading.Condition(self.lock)
+        self.waiting: list = []  # heap of (priority, arrival, video id): lowest priority number goes first
+        self.rank: dict = {}  # video id -> priority it is waiting at (not started yet)
+        self.arrivals = itertools.count()
+        self.closed = False
         self.pending: set = set()
         self.failed: dict = {}  # video id -> when it failed, so a bad video isn't retried every request
+        for _ in range(workers):
+            threading.Thread(target=self._work, name="yt-dlp", daemon=True).start()
 
     def ready(self, video_id: Optional[str]) -> Optional[Path]:
         if not video_id or not VIDEO_ID.match(video_id):
@@ -55,15 +63,50 @@ class Downloads:
                 return path
         return None
 
-    def fetch(self, video_id: Optional[str]) -> None:
-        """Start downloading in the background, unless it's here, on its way, or just failed."""
+    def fetch(self, video_id: Optional[str], priority: int = 100) -> None:
+        """Start downloading in the background, unless it's here, on its way, or just failed.
+
+        Lower priority numbers go first (0 is the song on now, 1 the song up next, and so on). Asking
+        again for a song still waiting moves it to the new priority, up or down, so a re-rank after
+        the queue changes puts every waiting song at its true place. One already started stays put."""
         if not video_id or not VIDEO_ID.match(video_id) or self.ready(video_id):
             return
         with self.lock:
-            if video_id in self.pending or time.time() - self.failed.get(video_id, 0) < RETRY_AFTER:
+            if video_id in self.pending:
+                if video_id not in self.rank or priority == self.rank[video_id]:
+                    return  # already started, or already waiting at that place
+            elif time.time() - self.failed.get(video_id, 0) < RETRY_AFTER:
                 return
             self.pending.add(video_id)
-        self.pool.submit(self._download, video_id)
+            self.rank[video_id] = priority
+            heapq.heappush(self.waiting, (priority, next(self.arrivals), video_id))
+            self.wake.notify()
+
+    def _next(self) -> Optional[str]:
+        """Wait for the best song still waiting. Entries left behind by a move-up are skipped."""
+        with self.wake:
+            while not self.closed:
+                while self.waiting:
+                    priority, _, video_id = heapq.heappop(self.waiting)
+                    if self.rank.get(video_id) == priority:
+                        del self.rank[video_id]
+                        return video_id
+                self.wake.wait()
+        return None
+
+    def _work(self) -> None:
+        while True:
+            video_id = self._next()
+            if video_id is None:
+                return
+            self._download(video_id)
+
+    def close(self) -> None:
+        with self.wake:
+            self.closed = True
+            self.waiting.clear()
+            self.rank.clear()
+            self.wake.notify_all()
 
     def status(self, video_id: Optional[str]) -> Optional[str]:
         """"ready", "pending" (on its way), "failed" (gave up for now) or None (never asked for)."""

@@ -405,3 +405,30 @@ def test_guessing_one_name_from_many_addresses_is_limited_too():
     assert caught.value.status == 429
     logins.passed(("name", "sam"))
     logins.check([("address", "d"), ("name", "sam")])
+
+
+@pytest.mark.parametrize("env_value", [None, ""])
+def test_admin_fails_closed_with_no_password_set(monkeypatch, env_value):
+    # Unset and empty must behave the same: nobody gets in, on any admin route, until a password exists.
+    if env_value is None:
+        monkeypatch.delenv("KARAQUEUE_ADMIN_PASSWORD", raising=False)
+    else:
+        monkeypatch.setenv("KARAQUEUE_ADMIN_PASSWORD", env_value)
+    client = TestClient(create_app(Store()))
+    assert client.get("/api/admin/status").json() == {"setup": True, "password_env": False}
+
+    for guess in ("", "admin", "password", "None"):
+        assert client.post("/api/admin/login", json={"password": guess}).status_code in (400, 401, 422), guess
+    assert client.post("/api/admin/login", json={"password": "x" * 8, "setup": ""}).status_code == 403
+
+    routes = [r for r in client.app.routes if getattr(r, "path", "").startswith("/api/admin/")
+              and r.path not in ("/api/admin/status", "/api/admin/login", "/api/admin/logout")]
+    assert len(routes) > 20
+    for route in routes:
+        path = route.path.replace("{kind}", "x").replace("{", "1").replace("}", "")
+        for method in route.methods - {"HEAD", "OPTIONS"}:
+            got = client.request(method, path, json={})
+            assert got.status_code in (401, 403, 422) and got.status_code != 200, (method, path, got.status_code)
+            if got.status_code != 422:  # 422 is the body check running first, which still gave nothing away
+                assert got.status_code == 401, (method, path)
+    assert client.get("/api/admin", headers=bearer("made-up")).status_code == 401

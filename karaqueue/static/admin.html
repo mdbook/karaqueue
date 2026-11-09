@@ -356,7 +356,61 @@
               flash("Downloads cleared", "ok");
             }) }, "Clear downloads"))));
     }
+    if (group === "Public access") return publicStatus(data);
     return null;
+  }
+
+  // ---- Public access: what the dynamic DNS updater and the router said last ----
+
+  const PUBLIC_DOCS = "https://github.com/mdbook/karaqueue/blob/main/docs/public-access.md";
+  const outLink = (href, text) => h("a", { href, target: "_blank", rel: "noopener" }, text);
+
+  function publicStatus(data) {
+    const p = data.public;
+    const item = (...body) => h("div", { class: "item" },
+      h("div", { class: "item-text" }, h("span", { class: "item-label" }, "Status"),
+        h("p", { class: "item-help" }, outLink(PUBLIC_DOCS, "How public access works"))),
+      h("div", { class: "item-body" }, ...body));
+    if (!p.on) return item(h("p", { class: "item-help" },
+      "Off. Pick a dynamic DNS provider, or open the port on the router, to let guests outside your network in."));
+    const check = h("button", { class: "ghost small", type: "button", onclick: act(async () => {
+      render(await call("POST", "/public/check"));
+      flash("Checked", "ok");
+    }) }, "Check now");
+    const lines = [h("div", { class: "facts" },
+      h("span", {}, "Public address ", h("strong", {}, p.public_ip || "unknown")),
+      p.router_ip ? h("span", {}, "Router says " + p.router_ip) : null,
+      p.checked_at ? h("span", {}, "checked " + ago(p.checked_at)) : null)];
+    if (p.ddns) lines.push(h("p", { class: p.ddns.ok ? "item-help" : "error" },
+      "Dynamic DNS: " + p.ddns.message + " (" + ago(p.ddns.at) + ")"));
+    if (p.provider === "noip") lines.push(h("p", { class: "item-help" },
+      "Free No-IP names stop working unless you confirm them every 30 days. Click the link in No-IP's email when it comes."));
+    if (p.port) lines.push(h("p", { class: p.port.ok ? "item-help" : "error" }, p.port.message));
+    if (p.port && !p.port.ok) lines.push(h("p", { class: "item-help" },
+      "Forward it by hand instead: in your router's settings, find Port forwarding (or Virtual server) and send TCP port " +
+      p.port.external_port + " to " + (p.lan_ip || "this machine's address on your network") + ", port " + p.port.internal_port + ". ",
+      outLink(PUBLIC_DOCS + "#forwarding-the-port-by-hand", "Step by step")));
+    if (p.error) lines.push(h("p", { class: "error" }, p.error));
+    if (p.plain_auth) lines.push(h("p", { class: "error" },
+      "The custom update URL is plain http, so the token (and the username and password, if set) travel unencrypted. " +
+      "Use the provider's https address if it has one."));
+    if (p.warning) lines.push(h("p", { class: "error" }, p.warning, " Try ",
+      Object.entries(p.tunnels).map(([name, href], i) => [i ? " or " : "", outLink(href, name)]), "."));
+    if (p.url) {
+      const current = (data.settings.find((s) => s.key === "public_url") || {}).value;
+      lines.push(h("div", { class: "row" }, h("span", {}, "Guests can use ", outLink(p.url, p.url)),
+        current !== p.url ? h("button", { class: "ghost small", type: "button", onclick: act(async () => {
+          render(await call("PUT", "/settings/public_url", { value: p.url }));
+          flash("Join links and QR codes use " + p.url + " now", "ok");
+        }) }, "Use for join links") : null));
+    }
+    if (p.plain_http) lines.push(h("p", { class: "error" },
+      "That's plain http: over it, passwords and sign-ins travel unencrypted. Don't sign in as admin from outside " +
+      "your network until you have https. For https, put ",
+      outLink("https://github.com/mdbook/karaqueue/blob/main/docs/install.md#https-at-home-with-caddy", "Caddy in front"),
+      " and point the forward at it, ", outLink(PUBLIC_DOCS + "#https-through-the-forward", "like this"), "."));
+    lines.push(h("div", { class: "row" }, check));
+    return item(...lines);
   }
 
   function render(data) {

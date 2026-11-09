@@ -4,6 +4,41 @@
 
 No app to install, no accounts needed for guests, no karaoke-machine subscription. It runs on your own server, plays your own song library (or YouTube), and when the Wi-Fi drops for a moment, phones and screens reconnect on their own.
 
+## Quick start
+
+You need [Docker with the Compose v2 plugin](https://docs.docker.com/compose/install/) and [Git](https://git-scm.com/downloads). Docker includes ffmpeg for conversions and yt-dlp for YouTube downloads. The Compose setup builds from source, so allow a few minutes for the first start. This repo does not yet publish a public image for a clone-free install.
+
+1. Get the files:
+
+   ```bash
+   git clone https://github.com/mdbook/karaqueue
+   cd karaqueue
+   cp .env.example .env
+   mkdir songs
+   ```
+
+2. Open `.env` in a text editor. Uncomment or add this line, replacing the example with your own password (at least 8 characters):
+
+   ```dotenv
+   KARAQUEUE_ADMIN_PASSWORD=replace-with-your-own-password
+   ```
+
+3. Start it:
+
+   ```bash
+   docker compose up -d
+   ```
+
+4. Open [localhost:8000](http://localhost:8000), choose **Host a night**, leave the name empty and sign in with your admin password. Start a room, then open its screen link on the TV. From another device, use this computer's network address instead of `localhost`, such as `http://192.168.1.10:8000`.
+
+## Configuration
+
+Put karaoke files in `songs`, or leave it empty to start with YouTube. Compose keeps the database, downloads and recordings in the `karaqueue-data` volume. Settings go in `.env`; after changing it, run `docker compose up -d` again. Most settings can also be changed at [/admin](http://localhost:8000/admin) without restarting. See the [configuration reference](docs/configuration.md) for every setting and [installation guide](docs/install.md) for backups and updates.
+
+Prefer Python? You need Python 3.9+, ffmpeg for conversions, and yt-dlp with a JavaScript runtime for YouTube downloads. Follow the [Python setup](docs/install.md#python).
+
+For guests outside your network, use https and set `KARAQUEUE_PUBLIC_URL`, see [Behind a reverse proxy](docs/install.md#behind-a-reverse-proxy). For a free dynamic DNS name or router port forwarding, see [Public access](docs/public-access.md).
+
 ![The big screen: the video, who's singing, who's next, and a QR code to join](docs/screenshots/tv-split.png)
 
 ## What a night looks like
@@ -30,33 +65,11 @@ No app to install, no accounts needed for guests, no karaoke-machine subscriptio
 
 **An admin page for the boring stuff.** Every setting, live, with no restart. Rooms, library folders and naming fixes, disk space, and inviting hosts and admins by link.
 
-## Quick start
-
-With Docker Compose:
-
-```bash
-git clone https://github.com/mdbook/karaqueue
-cd karaqueue
-cp .env.example .env
-mkdir songs        # put your karaoke files here, or leave it empty
-docker compose up -d
-```
-
-Then pick an admin password with the one-time setup link the server wrote: `docker compose exec karaqueue cat /data/admin-setup-link.txt` prints it (it starts at `/admin#setup=`, so open it as `http://localhost:8000/admin#setup=...`). Or skip the link and set `KARAQUEUE_ADMIN_PASSWORD` in `.env`. Then go back to the home page and start a room.
-
-Or straight from Python 3.9+:
-
-```bash
-pip install .
-KARAQUEUE_ADMIN_PASSWORD=pick-something karaqueue
-```
-
-Throwing a party for people outside your home network? Put it behind a reverse proxy with https and set `KARAQUEUE_PUBLIC_URL`, see [Behind a reverse proxy](docs/install.md#behind-a-reverse-proxy).
-
 ## Docs
 
 - [Installing and running](docs/install.md): Docker, Python, the first run, reverse proxies, backups
 - [Configuration](docs/configuration.md): every setting, in one table
+- [Public access](docs/public-access.md): putting a home server on the internet with free dynamic DNS, router port forwarding, or a tunnel
 - [Rooms, the rotation and hosting](docs/rooms.md): how turns work, what the host can do, getting back in on a new phone
 - [Your songs](docs/library.md): the song library, fixing names, YouTube downloads and saving songs
 - [Screens, sound and recordings](docs/screens.md): layouts, speakers, casting, the mic and recordings

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import secrets
 import time
 from pathlib import Path
@@ -74,11 +75,40 @@ SETTINGS = [
      "Once a room's takes add up to this, it saves no more until some are deleted."),
     ("recordings_max_gb", float, 20.0, "Recordings", "All recordings (GB)",
      "The most every room's takes can add up to. The server also always leaves 1 GB of the disk free."),
+    ("ddns_provider", str, "off", "Public access", "Dynamic DNS",
+     "A free name like myparty.duckdns.org that follows your home internet address, so guests outside your "
+     "network can reach this server. Make the name at the provider first. It also needs the port open on "
+     "your router, below. Free No-IP names stop working unless you confirm them every 30 days, from No-IP's email."),
+    ("ddns_hostname", str, "", "Public access", "Hostname",
+     "The name you made at the provider, like myparty.duckdns.org. FreeDNS doesn't need it, but it goes in the "
+     "guest link shown below."),
+    ("ddns_username", str, "", "Public access", "Username",
+     "No-IP and Dynu only: the account's username or email. A custom update URL sends it with the token as a password."),
+    ("ddns_token", str, "", "Public access", "Token or password",
+     "DuckDNS: the token on your DuckDNS page. No-IP and Dynu: the account password. FreeDNS: the update "
+     "token, the long part after update.php? in your Direct URL. Never shown again or written to the log."),
+    ("ddns_url", str, "", "Public access", "Custom update URL",
+     "For any other provider: its update address. {ip} becomes your public address and {hostname} the "
+     "hostname. Kept secret like the token, since these often carry one."),
+    ("ddns_minutes", int, 5, "Public access", "Check the address every (minutes)",
+     "How often the server looks up its public address. The provider only hears from it when the address "
+     "changes, and once a day."),
+    ("port_forward", str, "off", "Public access", "Open the port on the router",
+     "Asks your router to send guests' visits here, using UPnP, NAT-PMP or PCP. Many routers allow it; some "
+     "need it turned on in their settings, and some never do. The forward is taken off when the server stops. "
+     "It leads to plain http unless it goes to an https server, see Forward to port."),
+    ("router_port", int, 0, "Public access", "Port on the router",
+     "The port guests' visits arrive on at your router. 0 uses the same port as Forward to port. "
+     "443 makes the guest link https, for when the forward goes to an https server."),
+    ("forward_to_port", int, 0, "Public access", "Forward to port",
+     "The port on this machine the router forward leads to. 0 is the port the server listens on (plain http). "
+     "Point it at an https server in front of KaraQueue, like Caddy on 443, so passwords don't travel "
+     "unencrypted. Set by KARAQUEUE_FORWARD_TO_PORT only, so the admin page can't open other programs to the internet."),
 ]
-SECRET = {"youtube_api_key"}
+SECRET = {"youtube_api_key", "ddns_token", "ddns_url"}
 # Shown on the admin page but only changed in the environment: whoever has the admin page
-# shouldn't get to pick a program for the server to run.
-ENV_ONLY = {"ytdlp"}
+# shouldn't get to pick a program for the server to run, or open another one to the internet.
+ENV_ONLY = {"ytdlp", "forward_to_port"}
 # Folders the admin page can point at. They have to sit inside KARAQUEUE_ALLOWED_FOLDERS, or
 # inside the folders the environment already sets, so the admin page can't read or delete
 # files anywhere else on the server.
@@ -86,13 +116,21 @@ FOLDERS = ("media_dir", "save_dir", "downloads_dir", "recordings_dir")
 # Settings that are one of a few values: value -> label.
 CHOICES = {"new_rooms": {"accounts": "Account holders", "anyone": "Anyone"},
            "who_saves": {"admins": "Admins", "hosts": "Hosts too"},
-           "song_lookup": {"musicbrainz": "MusicBrainz", "off": "Off"}}
+           "song_lookup": {"musicbrainz": "MusicBrainz", "off": "Off"},
+           "ddns_provider": {"off": "Off", "duckdns": "DuckDNS", "noip": "No-IP", "dynu": "Dynu",
+                             "freedns": "FreeDNS (afraid.org)", "custom": "Custom update URL"},
+           "port_forward": {"off": "Off", "on": "On"}}
 ROLES = ("admin", "host")
 LIMITS = {"songs_per_singer": (1, 1000), "name_limit": (1, 200), "code_length": (5, 12),
           "rate_limit": (0, 100), "room_days": (0, 36500), "downloads_max_gb": (0.1, 100000), "recording_max_mb": (1, 10000),
           "recordings_room_mb": (1, 1000000), "recordings_max_gb": (0.1, 100000),
           "singers_per_room": (1, 10000), "screens_per_address": (1, 12), "conversions": (1, 64), "downloads_per_hour": (1, 10000),
-          "saves_per_hour": (1, 1000), "save_max_mb": (1, 100000)}
+          "saves_per_hour": (1, 1000), "save_max_mb": (1, 100000), "ddns_minutes": (1, 1440), "router_port": (0, 65535),
+          "forward_to_port": (0, 65535)}
+# Settings the public access updater reads: changing one makes it look again right away.
+PUBLIC_ACCESS = {key for key, *_ in SETTINGS if key.startswith("ddns_")} | {"port_forward", "router_port"}
+# Dot-separated labels of 1 to 63 letters, digits and inner hyphens.
+HOSTNAME = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$")
 # Read once at startup, so they're shown on the admin page but changed only in the environment.
 STARTUP = [("db", "karaqueue.db"), ("host", "0.0.0.0"), ("port", "8000"), ("trusted_proxies", "127.0.0.1"),
            ("allowed_folders", "the library, downloads and recordings folders set in the environment")]
@@ -134,6 +172,12 @@ def _coerce(key: str, value: Any) -> Any:
         value = value.rstrip("/")
         if value and not value.startswith(("http://", "https://")):
             raise Error("The public address must start with http:// or https://")
+    if key == "ddns_hostname":
+        value = value.lower().rstrip(".")
+        if value and (len(value) > 253 or not HOSTNAME.match(value)):
+            raise Error("Type just the hostname, like myparty.duckdns.org")
+    if key == "ddns_url" and value and not value.startswith(("http://", "https://")):
+        raise Error("The update URL must start with http:// or https://")
     return value
 
 

@@ -101,14 +101,18 @@ class Logins:
             self.fails.pop(key, None)
         return tries
 
-    def check(self, keys: list, scale: float = 1) -> None:
-        """`scale` stretches the per-address count, like the Rate limits setting; the per-name one stays put."""
+    def check(self, keys: list, scale: float = 1, spare_clean: bool = False) -> None:
+        """`scale` stretches the per-address count, like the Rate limits setting; the per-name one stays put.
+        `spare_clean` skips the per-name count for an address with no wrong tries of its own, so
+        guesses from elsewhere can't lock the owner out for good. Each address still gets only one
+        guess past a locked name: after that it has a wrong try of its own."""
         now = time.time()
         with self.lock:
+            clean = spare_clean and not any(k[0] == "address" and self._recent(k, now) for k in keys)
             for key in keys:
                 tries = self._recent(key, now)
                 limit = self.limits[key[0]]
-                if limit is None:
+                if limit is None or (clean and key[0] == "name"):
                     continue
                 if key[0] == "address":
                     limit = max(1, round(limit * scale)) if scale > 0 else float("inf")

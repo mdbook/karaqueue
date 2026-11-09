@@ -35,6 +35,7 @@ It starts its own throwaway server with a temporary database and clicks through 
 - **Rules live in the store.** Who can do what, and how the rotation works, belong in `karaqueue/store.py`, not just in the page.
 - **Add a test** for new behavior, next to the tests for the module you changed.
 - **Write for people.** User-facing text (and the docs) is short, plain and friendly. Say "the host lets the screen in", not "authorize the display client". No em dashes.
+- **Ignore `.fleet-category`.** It's a one-word note for the maintainers' own tooling, so you never need to change it.
 
 Then open a pull request saying what changed and why. GitHub runs the tests on Python 3.9 and 3.12.
 

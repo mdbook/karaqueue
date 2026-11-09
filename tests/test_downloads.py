@@ -142,6 +142,52 @@ def test_a_failed_download_tells_the_screen(tmp_path, monkeypatch):
     assert wait_for(lambda: client.get(f"/api/rooms/{code}").json()["now_playing"]["download"] == "failed")
 
 
+def test_downloads_start_in_priority_order_and_a_waiting_song_can_move_up(tmp_path, monkeypatch):
+    hold, calls = tmp_path / "hold", tmp_path / "calls"
+    hold.write_text("")
+    monkeypatch.setenv("FAKE_HOLD", str(hold))
+    monkeypatch.setenv("FAKE_LOG", str(calls))
+    downloads = Downloads(str(tmp_path / "dl"), command=fake_ytdlp(tmp_path), workers=1)
+    downloads.fetch("aaaaaaaaaaa", 5)  # starts at once and holds the only worker
+    assert wait_for(lambda: calls.exists() or downloads.rank == {})
+    for video, priority in (("bbbbbbbbbbb", 3), ("ccccccccccc", 2), ("ddddddddddd", 4)):
+        downloads.fetch(video, priority)
+    downloads.fetch("ddddddddddd", 1)  # the singer ahead of it left: it is up next now
+    hold.unlink()
+    assert wait_for(lambda: len(list((tmp_path / "dl").glob("*.mp4"))) == 4)
+    order = [line.rsplit("=", 1)[-1] for line in calls.read_text().split()]
+    assert order == ["aaaaaaaaaaa", "ddddddddddd", "ccccccccccc", "bbbbbbbbbbb"]
+    downloads.close()
+
+
+def test_songs_added_through_the_api_download_in_singing_order_not_arrival_order(tmp_path, monkeypatch):
+    hold, calls = tmp_path / "hold", tmp_path / "calls"
+    hold.write_text("")
+    monkeypatch.setenv("FAKE_HOLD", str(hold))
+    monkeypatch.setenv("FAKE_LOG", str(calls))
+    monkeypatch.setenv("KARAQUEUE_DOWNLOADS_DIR", str(tmp_path / "dl"))
+    monkeypatch.setenv("KARAQUEUE_YTDLP", fake_ytdlp(tmp_path))
+    monkeypatch.setattr("karaqueue.app.Downloads", lambda *a: Downloads(*a, workers=1))
+    client = TestClient(create_app(Store()))
+    code = client.post("/api/rooms", json={"name": "Friday"}).json()["code"]
+    tokens = [client.post(f"/api/rooms/{code}/singers", json={"name": f"Singer {n}"}).json()["token"]
+              for n in range(1, 7)]
+    videos = {n: chr(96 + n) * 11 for n in range(1, 7)}
+
+    def add(n):
+        r = client.post(f"/api/rooms/{code}/songs", headers={"Authorization": "Bearer " + tokens[n - 1]},
+                        json={"title": f"Song {n}", "artist": "x", "video": videos[n]})
+        assert r.status_code == 200
+
+    add(1)  # holds the only worker
+    for n in (6, 4, 2):  # arrives 6th, 4th, 2nd singer: each lands at its true place, the rest slide back
+        add(n)
+    hold.unlink()
+    assert wait_for(lambda: len(list((tmp_path / "dl").glob("*.mp4"))) == 4)
+    order = [line.rsplit("=", 1)[-1] for line in calls.read_text().split()]
+    assert order == [videos[n] for n in (1, 2, 4, 6)]
+
+
 def test_cache_drops_the_least_recently_played(tmp_path):
     downloads = Downloads(str(tmp_path), max_bytes=10)
     for i, name in enumerate(["aaaaaaaaaaa", "bbbbbbbbbbb", "ccccccccccc"]):
@@ -374,3 +420,65 @@ def test_a_stuck_download_ends_with_its_helpers_and_leftovers_get_swept(tmp_path
         os.utime(tmp_path / name, (when, when))
     sweep(tmp_path, HALF_DONE)
     assert sorted(p.name for p in tmp_path.iterdir() if p.suffix != ".pid") == ["bcdefghijkl.mp4.part", "cdefghijklm.mp4"]
+
+
+def _rank_client(tmp_path, monkeypatch):
+    hold = tmp_path / "hold"
+    hold.write_text("")
+    monkeypatch.setenv("FAKE_HOLD", str(hold))
+    monkeypatch.setenv("FAKE_LOG", str(tmp_path / "calls"))
+    monkeypatch.setenv("KARAQUEUE_DOWNLOADS_DIR", str(tmp_path / "dl"))
+    monkeypatch.setenv("KARAQUEUE_YTDLP", fake_ytdlp(tmp_path))
+    made = []
+    monkeypatch.setattr("karaqueue.app.Downloads", lambda *a: made.append(Downloads(*a, workers=1)) or made[-1])
+    client = TestClient(create_app(Store()))
+    room = client.post("/api/rooms", json={"name": "Friday"}).json()
+    code = room["code"]
+    client.host = {"Authorization": "Bearer " + room["host_token"]}
+
+    def add(video, n):
+        tok = client.post(f"/api/rooms/{code}/singers", json={"name": f"Singer {n}"}).json()["token"]
+        r = client.post(f"/api/rooms/{code}/songs", headers={"Authorization": "Bearer " + tok},
+                        json={"title": f"Song {n}", "artist": "x", "video": video})
+        assert r.status_code == 200
+    return client, code, hold, add, made
+
+
+def test_a_video_queued_twice_downloads_at_its_first_place(tmp_path, monkeypatch):
+    client, code, hold, add, made = _rank_client(tmp_path, monkeypatch)
+    a, b, c, d = "aaaaaaaaaaa", "bbbbbbbbbbb", "ccccccccccc", "ddddddddddd"
+    add(a, 1)  # holds the only worker
+    add(d, 2)
+    add(b, 3)  # repeated video: 3rd place and again 6th
+    add(c, 4)
+    add(c, 5)
+    add(d, 6)
+    for _ in range(3):  # polls must not flip priorities
+        client.get(f"/api/rooms/{code}")
+    hold.unlink()
+    assert wait_for(lambda: len(list((tmp_path / "dl").glob("*.mp4"))) == 4)
+    order = [line.rsplit("=", 1)[-1] for line in (tmp_path / "calls").read_text().split()]
+    assert order == [a, d, b, c]
+
+
+def test_the_playing_video_keeps_priority_zero_and_polls_do_not_grow_the_heap(tmp_path, monkeypatch):
+    client, code, hold, add, made = _rank_client(tmp_path, monkeypatch)
+    z, x, y = "zzzzzzzzzzz", "xxxxxxxxxxx", "yyyyyyyyyyy"
+    add(z, 1)  # starts at once and holds the only worker
+    add(x, 2)
+    add(y, 3)
+    add(x, 4)  # the video that is about to play, queued again later
+    dl = made[0]
+    assert dl.rank[x] == 2 and dl.rank[y] == 3  # z is queued first and already started
+    client.post(f"/api/rooms/{code}/next", headers=client.host)  # z is on now
+    assert client.get(f"/api/rooms/{code}").json()["now_playing"]["video_id"] == z
+    assert dl.rank[x] == 1 and dl.rank[y] == 2  # x's later place (3rd) doesn't win
+    client.post(f"/api/rooms/{code}/next", headers=client.host)  # x is on now, and queued again 2nd
+    client.get(f"/api/rooms/{code}")
+    assert dl.rank.get(x, 0) == 0  # never pushed back by its later place
+    size = len(dl.waiting)
+    for _ in range(5):
+        client.get(f"/api/rooms/{code}")
+    assert len(dl.waiting) == size  # polls change nothing
+    assert dl.rank.get(x, 0) == 0
+    hold.unlink()

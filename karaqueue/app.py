@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import hmac
 import ipaddress
@@ -31,7 +32,8 @@ from .downloads import search as ytdlp_search
 from .guards import Logins, Protect
 from .limits import SOCKETS, Limiter
 from .media import Library, lookup, naming_rule
-from .settings import RULES_KEY, Settings, _scrypt, env_name, hash_password, password_matches
+from .public import PublicAccess, listen_port
+from .settings import PUBLIC_ACCESS, RULES_KEY, SECRET, Settings, _scrypt, env_name, hash_password, password_matches
 from .store import CLAIM_SECONDS, Error, NoRoom, Store
 
 log = logging.getLogger("karaqueue")
@@ -165,6 +167,14 @@ class UserChange(BaseModel):
     password: Optional[str] = None
 
 
+def quiet_unlink(path: Path) -> None:
+    """Delete a leftover file without letting a stuck one hide the real error it's cleaning up after."""
+    try:
+        path.unlink(missing_ok=True)
+    except OSError as exc:
+        log.warning("Couldn't delete %s: %s", path, exc)
+
+
 def make_seekable(path: Path) -> None:
     """Browsers record webm without a length or seek index, so players can't skip around in it.
     Copying it through ffmpeg (no re-encoding) writes both. Without ffmpeg, or if it fails,
@@ -181,7 +191,7 @@ def make_seekable(path: Path) -> None:
     except (OSError, subprocess.SubprocessError):
         pass
     finally:
-        fixed.unlink(missing_ok=True)
+        quiet_unlink(fixed)
 
 
 def device(user_agent: str) -> str:
@@ -217,10 +227,25 @@ def create_app(store: Optional[Store] = None) -> FastAPI:
         store = Store(path=db)
         setup_file = Path(db).resolve().parent / "admin-setup-link.txt"
     cfg = Settings(store, setup_file=setup_file)
-    app = FastAPI(title="KaraQueue")
+    # Dynamic DNS and the router port forward, in a thread that runs while the server does.
+    # The store keeps any forward still on the router, so one left by a crash comes off next start.
+    public = PublicAccess(cfg.get, listen_port(), store)
+
+    @contextlib.asynccontextmanager
+    async def lifespan(app: FastAPI):
+        public.start()
+        try:
+            yield
+        finally:
+            await asyncio.to_thread(public.stop)  # takes the port forward off the router
+
+    app = FastAPI(title="KaraQueue", lifespan=lifespan)
     app.add_middleware(Protect, static=STATIC)
     app.state.settings = cfg
+    app.state.public = public
     hub = Hub(store)
+    app.state.hub = hub  # tests wait on it for sockets to finish closing
+    app.state.open_sockets = 0  # sockets whose handler hasn't finished hub.disconnect yet
 
     # Settings can change while the server runs, so everything reads them when it needs them.
     # The library and downloader are rebuilt when a setting they were made from changes.
@@ -230,7 +255,9 @@ def create_app(store: Optional[Store] = None) -> FastAPI:
         old = built.get(name)
         if old and old[0] == args:
             return old[1]
-        if old and hasattr(old[1], "pool"):
+        if old and hasattr(old[1], "close"):
+            old[1].close()
+        elif old and hasattr(old[1], "pool"):
             old[1].pool.shutdown(wait=False)
         built[name] = (args, make(*args) if args[0] else None)
         return built[name][1]
@@ -283,7 +310,7 @@ def create_app(store: Optional[Store] = None) -> FastAPI:
     sweep()
     for key in cfg.ignored():
         log.warning("Ignoring %s saved on the admin page (%s). Set %s in the environment instead.",
-                    key, cfg.saved[key], env_name(key))
+                    key, "hidden" if key in SECRET else cfg.saved[key], env_name(key))
     if cfg.setup_token:
         # Never the link itself: logs get shipped and read by more people than the server's owner.
         where = f"is in {setup_file} on the server" if setup_file and setup_file.exists() else "couldn't be saved"
@@ -509,13 +536,33 @@ def create_app(store: Optional[Store] = None) -> FastAPI:
             fetches[key] = recent + [now]
         return True
 
-    def fetch(room: str, video: Optional[str], playing: bool = False) -> None:
+    def fetch(room: str, video: Optional[str], playing: bool = False, order: int = 1) -> None:
+        """`order` is how soon the song plays: 1 is up next. The one that's on always goes first."""
         dl = downloads()
-        if not dl or not video or dl.status(video) is not None:
-            return  # nothing to do, or already here, on its way or just failed
+        if not dl or not video:
+            return
+        status = dl.status(video)
+        if status == "pending":
+            dl.fetch(video, 0 if playing else order)  # a waiting song moves to its new place
+            return
+        if status is not None:
+            return  # already here or just failed
         # The song that's on always comes down: that's one per song sung.
         if one_more(room, always=playing):
-            dl.fetch(video)
+            dl.fetch(video, 0 if playing else order)
+
+    def rerank(room: str, playing: Optional[str] = None) -> None:
+        """Put every waiting song at its true place in the singing order, so a song added late
+        (or one that pushed the others back) downloads when its turn is near, not on arrival.
+        A video queued more than once goes at its first (best) place; the playing one keeps 0."""
+        seen = {playing}
+        order = 0
+        for queued in store.queued_videos(room):
+            order += 1
+            if queued in seen:
+                continue
+            seen.add(queued)
+            fetch(room.upper(), queued, order=order)
 
     @app.get("/api/rooms/{code}")
     def room_state(code: str):
@@ -527,8 +574,7 @@ def create_app(store: Optional[Store] = None) -> FastAPI:
         # downloads were turned on, or before a restart. Already-fetched ones are a quick no-op.
         if dl and np and np.get("video_id") and not np.get("media"):
             fetch(state["code"], np["video_id"], playing=True)
-            for video in store.queued_videos(code):
-                fetch(state["code"], video)
+            rerank(state["code"], playing=np["video_id"])
             status = dl.status(np["video_id"])
             if status == "ready":
                 np["file"] = song_link("downloads", np["video_id"], state["code"])
@@ -641,7 +687,7 @@ def create_app(store: Optional[Store] = None) -> FastAPI:
                 raise Error("That song isn't in the library anymore", 400)
             video = youtube.video_id(body.video)
             song = store.add_song(code, tok, body.title, body.artist, body.singer_id, video, body.media or None)
-            fetch(code.upper(), video)
+            rerank(code, playing=((store.state(code)["now_playing"] or {}).get("video_id")))
             return song
         return await changed(code, await asyncio.to_thread(add))
 
@@ -766,7 +812,7 @@ def create_app(store: Optional[Store] = None) -> FastAPI:
                 size = (folder / name).stat().st_size
             recording = store.add_recording(code, song, name, size)
         except BaseException:
-            (folder / name).unlink(missing_ok=True)
+            quiet_unlink(folder / name)
             hub.release_upload(code, display, song)
             raise
         return await changed(code, {"id": recording})
@@ -818,7 +864,10 @@ def create_app(store: Optional[Store] = None) -> FastAPI:
         """Admins sign in here for the admin page, and hosts to start rooms when that needs an account."""
         keys = [("address", address(request)),
                 ("name", (body.name or "").strip().lower())]
-        logins.check(keys)
+        # The admin password (no name) locked by wrong tries from elsewhere still lets in an address
+        # with none of its own, so strangers on the internet can't keep the admin locked out. Named
+        # accounts keep their lock, or guessers would get one try per fresh address past the limit.
+        logins.check(keys, spare_clean=not keys[1][1])
         if body.setup is not None:
             # First run: the one-time link from admin-setup-link.txt lets you pick a password.
             if not cfg.setup_token or not secrets.compare_digest(body.setup, cfg.setup_token):
@@ -868,7 +917,7 @@ def create_app(store: Optional[Store] = None) -> FastAPI:
                 "password_env": cfg.password_from_env(), "users": store.users(), "guests": store.guests(),
                 "sessions": store.sessions(), "invites": store.invites(),
                 "library": lib.counts() if lib else None,
-                "downloads": dl.usage() if dl else None}
+                "downloads": dl.usage() if dl else None, "public": public.status()}
 
     @app.get("/api/admin")
     def admin_get(who: dict = Depends(admin)):
@@ -947,12 +996,27 @@ def create_app(store: Optional[Store] = None) -> FastAPI:
     def admin_set(key: str, body: ValueIn):
         cfg.set(key, body.value)
         sync_store()
+        public_changed(key)
         return admin_state()
 
     @app.delete("/api/admin/settings/{key}", dependencies=[Depends(admin)])
     def admin_reset(key: str):
         cfg.reset(key)
         sync_store()
+        public_changed(key)
+        return admin_state()
+
+    def public_changed(key: str) -> None:
+        # Checked here and now, so the admin page shows how it went as soon as the setting's saved.
+        # A failure lands in the status shown, not in a 500 for a setting that was saved fine.
+        if key in PUBLIC_ACCESS:
+            public.look()
+            public.poke()  # and the thread works out its next look from the new settings
+
+    @app.post("/api/admin/public/check", dependencies=[Depends(admin)])
+    def admin_public_check():
+        """Look up the address, send it to the provider and open the port again, right now."""
+        public.look(force=True)
         return admin_state()
 
     @app.put("/api/admin/password")
@@ -1241,6 +1305,7 @@ def create_app(store: Optional[Store] = None) -> FastAPI:
             await ws.close(code=1013)  # "try again later": the room has too many open connections
             return
         sockets_from[who] = sockets_from.get(who, 0) + 1
+        app.state.open_sockets += 1
         try:
             while True:
                 text = await ws.receive_text()
@@ -1259,7 +1324,11 @@ def create_app(store: Optional[Store] = None) -> FastAPI:
             sockets_from[who] -= 1
             if not sockets_from[who]:
                 del sockets_from[who]
-            await hub.disconnect(code, ws)
+            # Run the goodbye broadcast as its own task: a client dropping mid-broadcast cancels this
+            # handler, and must not leave the room half told. The count falls only once it is done.
+            leaving = asyncio.ensure_future(hub.disconnect(code, ws))
+            leaving.add_done_callback(lambda _t: setattr(app.state, "open_sockets", app.state.open_sockets - 1))
+            await asyncio.shield(leaving)
 
     @app.get("/")
     def home():

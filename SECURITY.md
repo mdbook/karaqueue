@@ -22,4 +22,4 @@ Out of scope: rate limits being too loose or too tight (they're a setting), anyt
 
 ## How it protects itself
 
-[Admin and accounts](docs/admin.md#how-sign-in-works) explains keys, passwords and sign-ins, and [Configuration](docs/configuration.md#two-settings-the-admin-page-cant-change) covers the limits on what the admin page can change.
+[Admin and accounts](docs/admin.md#how-sign-in-works) explains keys, passwords and sign-ins, and [Configuration](docs/configuration.md#settings-the-admin-page-cant-change) covers the limits on what the admin page can change.

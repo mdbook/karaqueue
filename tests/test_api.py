@@ -1,3 +1,6 @@
+import contextlib
+import time
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -22,6 +25,28 @@ def one_loop():
     yield make
     for client in clients:
         client.__exit__(None, None, None)
+
+
+@contextlib.contextmanager
+def sockets(client, code, count):
+    """Open `count` sockets to a room and, on the way out, let the server finish with all of them.
+    The test client cancels a socket's server task right after telling it the client left, and that can
+    land while the server is still telling the room, which surfaces as a CancelledError from the with-block."""
+    with contextlib.ExitStack() as stack:
+        opened = [stack.enter_context(client.websocket_connect(f"/ws/{code}")) for _ in range(count)]
+        try:
+            yield opened
+        finally:
+            for ws in opened:
+                ws.close()
+            # Wait for every handler to finish hub.disconnect, not just for the socket to leave the room:
+            # the hub forgets the socket before it broadcasts the goodbye.
+            for _ in range(200):
+                if not client.app.state.open_sockets:
+                    break
+                time.sleep(0.025)
+            else:
+                pytest.fail("the server did not finish closing the sockets within 5 s")
 
 
 def test_a_night_of_karaoke():
@@ -156,8 +181,7 @@ def test_sound_from_one_screen_and_the_others_follow_its_clock(one_loop):
     # Guests don't need to know which screen it is, so nobody can pose as it.
     assert "sound" not in client.get(f"/api/rooms/{code}").json()["options"]
 
-    with client.websocket_connect(f"/ws/{code}") as panel, client.websocket_connect(f"/ws/{code}") as tv, \
-            client.websocket_connect(f"/ws/{code}") as phone:
+    with sockets(client, code, 3) as (panel, tv, phone):
         panel.send_json({"type": "hello", "display": {"id": "panel-1234abcd", "panel": True}, "host": room["host_token"]})
         assert panel.receive_json()["sound"] == "panel-1234abcd"
         assert tv.receive_json() == {"type": "displays"}
@@ -298,11 +322,11 @@ def test_screens_wait_until_the_host_lets_them_in_and_cant_be_hijacked(one_loop)
     key = welcome["key"]
 
     client.put(f"/api/rooms/{code}/options", headers=host, json={"sound": "tv-1234abcd"})
-    with client.websocket_connect(f"/ws/{code}") as tv, client.websocket_connect(f"/ws/{code}") as other_tv, \
-            client.websocket_connect(f"/ws/{code}") as attacker:
+    with sockets(client, code, 3) as (tv, other_tv, attacker):
         # The TV comes back with its key, straight in, as does a second screen opened by the host.
         tv.send_json({**tv_hello, "key": key})
-        assert tv.receive_json()["type"] == "welcome"
+        # Not receive_json(): the last socket closing can still be telling the room, and that can land first.
+        until(tv, "welcome")
         other_tv.send_json({"type": "hello", "display": {"id": "tv-9999abcd"}, "host": room["host_token"]})
         assert until(other_tv, "welcome")
         # Someone who knows the TV's id but not its key only gets to wait, and the TV stays put.
@@ -340,7 +364,7 @@ def test_a_screen_let_in_by_its_code_moves_the_show_along(one_loop):
     playing = lambda: client.get(f"/api/rooms/{code}").json()["now_playing"]  # noqa: E731
     first = playing()
 
-    with client.websocket_connect(f"/ws/{code}") as tv, client.websocket_connect(f"/ws/{code}") as stranger:
+    with sockets(client, code, 2) as (tv, stranger):
         tv.send_json({"type": "hello", "display": {"id": "tv-1234abcd"}})
         until(tv, "waiting")
         [asking] = client.get(f"/api/rooms/{code}/waiting", headers=host).json()
@@ -350,8 +374,8 @@ def test_a_screen_let_in_by_its_code_moves_the_show_along(one_loop):
         stranger.send_json({"type": "hello", "display": {"id": "tv-9999abcd"}})
         until(stranger, "waiting")
         stranger.send_json({"type": "ended", "song": first["id"]})
-        tv.send_json({"type": "status", "state": "idle"})
-        until(tv, "displays")
+        stranger.send_json({"type": "hello", "display": {"id": "tv-9999abcd"}})
+        pairing(stranger)  # its messages are handled in order, so the "ended" before this one has been
         assert playing()["id"] == first["id"]
         # The TV says the song ended: next singer. Saying it again changes nothing.
         tv.send_json({"type": "ended", "song": first["id"]})
@@ -359,8 +383,14 @@ def test_a_screen_let_in_by_its_code_moves_the_show_along(one_loop):
         second = playing()
         assert second["singer"] == "Sam"
         tv.send_json({"type": "ended", "song": first["id"]})
-        tv.send_json({"type": "status", "state": "idle"})
-        until(tv, "displays")
+        tv.send_json({"type": "status", "state": "paused"})
+        # Only this status is news: the "displays" pings from letting the TV in may still be queued.
+        for _ in range(100):
+            [shown] = client.get(f"/api/rooms/{code}/displays", headers=host).json()
+            if shown["state"] == "paused":
+                break
+            time.sleep(0.05)
+        assert shown["state"] == "paused"  # so the repeated "ended" before it has been handled too
         assert playing()["id"] == second["id"]
 
 
@@ -372,8 +402,7 @@ def test_screens_asking_to_join_cant_push_each_other_out(one_loop):
     asking = lambda: client.get(f"/api/rooms/{code}/waiting", headers=host).json()  # noqa: E731
     client.app.state.settings.set("screens_per_address", 2)
 
-    with client.websocket_connect(f"/ws/{code}") as one, client.websocket_connect(f"/ws/{code}") as two, \
-            client.websocket_connect(f"/ws/{code}") as three:
+    with sockets(client, code, 3) as (one, two, three):
         one.send_json(hello(1))
         first = until(one, "waiting")["code"]
         # Saying hello again keeps the screen's place and its code.
@@ -399,7 +428,7 @@ def test_a_screen_the_host_never_answers_gives_up_its_place(one_loop, monkeypatc
     client = one_loop(create_app(Store()))
     code = client.post("/api/rooms", json={"name": "Friday"}).json()["code"]
     client.app.state.settings.set("screens_per_address", 1)
-    with client.websocket_connect(f"/ws/{code}") as one, client.websocket_connect(f"/ws/{code}") as two:
+    with sockets(client, code, 2) as (one, two):
         one.send_json({"type": "hello", "display": {"id": "tv-1234abcd"}})
         until(one, "waiting")
         two.send_json({"type": "hello", "display": {"id": "tv-2234abcd"}})
@@ -416,10 +445,10 @@ def test_an_address_that_keeps_asking_to_join_is_refused(one_loop):
     room = client.post("/api/rooms", json={"name": "Friday"}).json()
     code = room["code"]
     for n in range(20):
-        with client.websocket_connect(f"/ws/{code}") as tv:
+        with sockets(client, code, 1) as [tv]:
             tv.send_json({"type": "hello", "display": {"id": f"tv-{n:02d}34abcd"}})
             until(tv, "waiting")
-    with client.websocket_connect(f"/ws/{code}") as tv:
+    with sockets(client, code, 1) as [tv]:
         tv.send_json({"type": "hello", "display": {"id": "tv-9934abcd"}})
         assert until(tv, "error")["retry"]
 
@@ -529,3 +558,14 @@ def test_a_socket_that_stops_reading_cant_stall_the_room(monkeypatch):
     asyncio.run(hub.notify("ABCDEF"))
     assert phone.got == [{"type": "update"}] and stuck.closed
     assert hub.rooms["ABCDEF"] == {phone}
+
+
+def test_a_leftover_file_that_cant_be_deleted_is_logged_not_raised(tmp_path, caplog):
+    from karaqueue.app import quiet_unlink
+    quiet_unlink(tmp_path / "missing.webm")  # nothing there is fine
+    stuck = tmp_path / "stuck"
+    stuck.mkdir()
+    (stuck / "inner").write_text("x")
+    with caplog.at_level("WARNING", logger="karaqueue"):
+        quiet_unlink(stuck)  # unlink() on a non-empty directory raises OSError
+    assert any("stuck" in m for m in caplog.messages)

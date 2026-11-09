@@ -38,12 +38,22 @@ Apart from the ones marked "set at startup only", you can also change any of the
 | `KARAQUEUE_YTDLP` | `yt-dlp` | The yt-dlp command, if it isn't on the `PATH`. Set at startup only. |
 | `KARAQUEUE_YTDLP_FORMAT` | (mp4, up to 1080p) | A yt-dlp `-f` format string, if you want something else. |
 | `KARAQUEUE_ROOM_DAYS` | `30` | Rooms nobody has changed in this many days get deleted, along with their recordings. A room with a phone or screen still open is kept. `0` keeps rooms forever. |
+| `KARAQUEUE_DDNS_PROVIDER` | `off` | Keeps a dynamic DNS name pointed at your home connection: `duckdns`, `noip`, `dynu`, `freedns`, `custom` or `off`. See [Public access](public-access.md). |
+| `KARAQUEUE_DDNS_HOSTNAME` | (none) | The name you made at the provider, like `myparty.duckdns.org`. |
+| `KARAQUEUE_DDNS_USERNAME` | (none) | No-IP and Dynu: the account's username or email. With `custom`, sent with the token as a password. |
+| `KARAQUEUE_DDNS_TOKEN` | (none) | The provider's token or password. Kept secret: the admin page never shows it and the log never prints it. |
+| `KARAQUEUE_DDNS_URL` | (none) | With `custom`: the update address, where `{ip}` becomes your public address and `{hostname}` the hostname. Kept secret like the token. |
+| `KARAQUEUE_DDNS_MINUTES` | `5` | How often the server looks up its public address. The provider only hears from it when the address changes, and once a day. |
+| `KARAQUEUE_PORT_FORWARD` | `off` | `on` asks the router to forward the port here (UPnP, NAT-PMP or PCP), and takes it off again when the server stops. |
+| `KARAQUEUE_ROUTER_PORT` | `0` | The port on the router that guests' visits arrive on. `0` uses the same port as `KARAQUEUE_FORWARD_TO_PORT`. `443` makes the guest link https. |
+| `KARAQUEUE_FORWARD_TO_PORT` | `0` | The port on this machine the router forward leads to. `0` uses `KARAQUEUE_PORT` (plain http). Set it to an https server in front of KaraQueue, like Caddy on `443`. Set in the environment only. See [Public access](public-access.md#https-through-the-forward). |
 
-## Two settings the admin page can't change
+## Settings the admin page can't change
 
 So that whoever gets into the admin page still can't take over the server:
 
 - The yt-dlp command comes from `KARAQUEUE_YTDLP` only.
+- The port the router forward leads to comes from `KARAQUEUE_FORWARD_TO_PORT` only, so the admin page can't open some other program on the machine to the internet.
 - Library, saved-songs, downloads and recordings folders have to be inside `KARAQUEUE_ALLOWED_FOLDERS`. Without it, they have to be inside the folders the environment already sets. So with `KARAQUEUE_MEDIA_DIR=/media`, the admin page can add `/media/Rock` but not `/etc`.
 
 The server logs a warning at startup for any saved value it ignores because of these rules.
