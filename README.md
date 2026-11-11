@@ -116,6 +116,45 @@ For guests outside your network, use https and set `KARAQUEUE_PUBLIC_URL`, see [
 
 Bug reports, ideas and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) has the setup (it's a `pip install` and `pytest`), and [SECURITY.md](SECURITY.md) says how to report a security problem privately.
 
+### Weekly container build
+
+The existing Monday GitLab schedule resolves the latest Python dependencies and
+`yt-dlp[default,deno]` on Python 3.12/Linux. It hashes the downloaded wheels and
+installs with `pip --require-hashes`; other builds use the committed
+`requirements.lock`. The local app is installed without dependency resolution or
+build isolation, using the locked setuptools. Python's base image and Debian's
+ffmpeg packages are not covered by the Python lock.
+
+**Bootstrap needed:** this checkout has no package-index access, so the initial
+lock is a fail-closed marker, not invented hashes. Run a scheduled pipeline,
+review its `requirements.lock` artifact, and commit it before merging this change.
+Until then, non-scheduled and local container builds deliberately fail the lock
+check. Later lock refreshes follow the same review-and-commit process; CI never
+pushes to git and needs no repository write credential.
+
+Every CI image build imports the installed tools, reports their versions, and
+fetches metadata for yt-dlp's small public test video with a 60-second process
+timeout and no media download. Failure prevents any image push. The network smoke
+is unverified locally until the first pipeline. Local Docker builds run just the
+offline import/version checks unless `--build-arg EXTRACTOR_SMOKE=1` is supplied.
+CI disables build caching so the smoke gate cannot reuse an old success.
+
+The resolved lock is a non-expiring job artifact, `/app/requirements.lock` in the
+image, and the full `me.mdbook.karaqueue.requirements` image label. Scheduled
+images receive `latest`, UTC `YYYY-MM-DD`, short commit SHA, and branch tags;
+other builds retain branch/SHA tags and `latest` on the default branch. Repeated
+builds on the same day/commit overwrite those tags; date tags from previous days
+remain available for rollback. CI never deletes tags. All pushes use only this
+project's `CI_REGISTRY_*` credentials and `CI_REGISTRY_IMAGE`.
+
+Infra must set masked `FLEET_ALERT_WEBHOOK` to an Apprise notification endpoint
+accepting JSON `body`, and preserve dated/SHA tags in any registry cleanup policy.
+Scheduled failures POST the repo and pipeline URL; an unset endpoint logs a skip.
+No broader token was used in the previous CI, so none needs replacing in this file;
+infra should remove any unused legacy deploy/cross-project credentials from project
+variables. Keep the schedule on the default branch and confirm registry access,
+outbound PyPI/YouTube access, the first smoke result, and alert delivery in CI.
+
 ## License
 
 GPL-3.0-or-later, see [LICENSE](LICENSE).

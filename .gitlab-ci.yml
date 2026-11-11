@@ -4,6 +4,19 @@
 stages:
   - test
   - build
+  - notify
+
+requirements:
+  stage: test
+  image: python:3.12-slim
+  script:
+    - if [ "$CI_PIPELINE_SOURCE" = schedule ]; then python ci/lock.py resolve; else python ci/lock.py check; fi
+  artifacts:
+    paths: [requirements.lock]
+    expire_in: never
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
 
 test:
   stage: test
@@ -15,7 +28,7 @@ test:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH
 
-# Tagged with the branch name and the commit; the default branch also gets "latest".
+# Only the project's ephemeral registry credentials are used, never a deploy token.
 container:
   stage: build
   image:
@@ -26,13 +39,28 @@ container:
     - printf '{"auths":{"%s":{"username":"%s","password":"%s"}}}' "$CI_REGISTRY" "$CI_REGISTRY_USER" "$CI_REGISTRY_PASSWORD" > /kaniko/.docker/config.json
     - EXTRA=""
     - if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then EXTRA="--destination $CI_REGISTRY_IMAGE:latest"; fi
+    - if [ "$CI_PIPELINE_SOURCE" = schedule ]; then EXTRA="--destination $CI_REGISTRY_IMAGE:latest --destination $CI_REGISTRY_IMAGE:$(date -u +%Y-%m-%d)"; fi
     - >
       /kaniko/executor
       --context "$CI_PROJECT_DIR"
       --dockerfile "$CI_PROJECT_DIR/Dockerfile"
       --destination "$CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG"
       --destination "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
+      --build-arg EXTRACTOR_SMOKE=1
+      --label "me.mdbook.karaqueue.requirements=$(cat requirements.lock)"
+      --label "org.opencontainers.image.revision=$CI_COMMIT_SHA"
+      --cache=false
       $EXTRA
       --cleanup
   rules:
     - if: $CI_COMMIT_BRANCH && $CI_REGISTRY
+
+scheduled-failure:
+  stage: notify
+  image: python:3.12-slim
+  dependencies: []
+  script:
+    - python ci/alert.py
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: on_failure
