@@ -64,11 +64,17 @@ def test_resolver_uses_current_project_requirements_and_binary_wheels(tmp_path, 
             archive.writestr("fastapi.dist-info/METADATA", "Name: fastapi\nVersion: 9.9\n")
 
     monkeypatch.setattr(lock.subprocess, "run", download)
+    monkeypatch.setenv("SOAK_CUTOFF", "2026-01-01T00:00:00Z")
     lock.resolve()
-    command, options = calls[0]
+    newest, soaked = calls
+    # yt-dlp is exempt from the soak: fetched newest on its own, then everything else is age-capped.
+    assert "--no-deps" in newest[0] and newest[0][-1] == "yt-dlp"
+    command, options = soaked
     assert "--only-binary=:all:" in command
+    assert command[command.index("--uploaded-prior-to") + 1] == "2026-01-01T00:00:00Z"
+    assert command[command.index("--find-links") + 1] == newest[0][newest[0].index("--dest") + 1]
     assert command[-3:] == ["fastapi>=0.110", "yt-dlp[default,deno]", "setuptools>=68"]
-    assert options == {"check": True, "timeout": 240}
+    assert options == {"check": True, "timeout": 240} == newest[1]
     lock.check(lock.LOCK.read_text())
     assert "fastapi==9.9" in lock.LOCK.read_text()
 

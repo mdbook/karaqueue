@@ -4,6 +4,7 @@ Resolution runs on Python 3.12/Linux, just like the container. No source builds 
 extra resolver dependency are needed. Publishing a refreshed lock is a human step.
 """
 import hashlib
+import os
 import re
 import subprocess
 import sys
@@ -52,10 +53,14 @@ def resolve():
     # setuptools is locked too: install the local app without build isolation or dependencies.
     requirements = project["project"]["dependencies"] + ["yt-dlp[default,deno]", "setuptools>=68"]
     with tempfile.TemporaryDirectory(dir=ROOT) as directory:
-        subprocess.run([
-            sys.executable, "-m", "pip", "download", "--only-binary=:all:",
-            "--no-cache-dir", "--dest", directory, *requirements,
-        ], check=True, timeout=240)
+        pip = [sys.executable, "-m", "pip", "download", "--only-binary=:all:", "--no-cache-dir"]
+        # yt-dlp is exempt from the soak (extractors break within days): take the newest wheel,
+        # then resolve everything else no newer than SOAK_CUTOFF (set by the shared image-hygiene include).
+        with tempfile.TemporaryDirectory() as newest:
+            subprocess.run([*pip, "--no-deps", "--dest", newest, "yt-dlp"], check=True, timeout=240)
+            cutoff = ["--uploaded-prior-to", os.environ["SOAK_CUTOFF"]] if os.environ.get("SOAK_CUTOFF") else []
+            subprocess.run([*pip, "--find-links", newest, *cutoff, "--dest", directory, *requirements],
+                           check=True, timeout=240)
         text = wheel_lock(Path(directory))
     check(text)
     LOCK.write_text(text)

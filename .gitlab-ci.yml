@@ -1,3 +1,8 @@
+include:
+  - project: mikayla/ci-templates
+    ref: main
+    file: image-hygiene.yml
+
 # Tests on every push and merge request; a container image in this project's registry for
 # every branch. Nothing here deploys anything.
 
@@ -10,6 +15,7 @@ requirements:
   stage: test
   image: python:3.12-slim
   script:
+    - !reference [.soak-cutoff, script]
     - if [ "$CI_PIPELINE_SOURCE" = schedule ]; then python ci/lock.py resolve; else python ci/lock.py check; fi
   artifacts:
     paths: [requirements.lock]
@@ -64,3 +70,8 @@ scheduled-failure:
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
       when: on_failure
+
+image-scan:
+  variables:
+    IMAGE_SCAN_REF: "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
+
