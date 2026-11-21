@@ -97,6 +97,9 @@ class DisplayIn(BaseModel):
     mic: Optional[bool] = None
     mic_volume: Optional[int] = None
     reverb: Optional[int] = None
+    echo: Optional[int] = None
+    voice: Optional[str] = None
+    mics: Optional[list] = None
     record: Optional[bool] = None
     action: Optional[str] = None
 

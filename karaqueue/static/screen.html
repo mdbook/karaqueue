@@ -49,6 +49,7 @@
 
 <script src="/static/kq.js"></script>
 <script src="/static/kq-cdg.js"></script>
+<script src="/static/kq-voice.js"></script>
 <script>
   const LAYOUTS = ["split", "video", "queue", "splash", "confidence"];
   const VIDEO_LAYOUTS = ["split", "video", "confidence"];
@@ -96,6 +97,9 @@
     mic: !!saved.mic,
     mic_volume: Number.isFinite(saved.mic_volume) ? saved.mic_volume : 80,
     reverb: Number.isFinite(saved.reverb) ? saved.reverb : 25,
+    echo: Number.isFinite(saved.echo) ? saved.echo : 0,
+    voice: saved.voice === "chipmunk" ? "chipmunk" : "normal",
+    mics: Array.isArray(saved.mics) ? saved.mics.slice(0, 4) : [],
     record: !!saved.record,
   };
   const persist = () => localStorage.setItem(settingsKey, JSON.stringify(display));
@@ -152,7 +156,9 @@
     if (typeof s.sink === "string") display.sink = s.sink;
     if (s.mic != null) display.mic = !!s.mic;
     if (s.record != null) display.record = !!s.record;
-    for (const k of ["mic_volume", "reverb"]) {
+    if (s.voice === "normal" || s.voice === "chipmunk") display.voice = s.voice;
+    if (Array.isArray(s.mics)) display.mics = s.mics.slice(0, 4);
+    for (const k of ["mic_volume", "reverb", "echo"]) {
       if (Number.isFinite(s[k])) display[k] = Math.max(0, Math.min(100, Math.round(s[k])));
     }
     persist();
@@ -191,9 +197,24 @@
         .map((d) => ({ id: d.deviceId, label: d.label }));
       audio = outputs.length > 1 ? "ready" : "locked";
     }
-    send({ type: "outputs", audio, outputs });
+    send({ type: "outputs", audio, outputs, inputs: await listInputs() });
+  }
+
+  // The microphones this screen can use. The browser adds a "default" and a "communications"
+  // copy of the real ones; the host picks from the real ones. `channels` is known for open mics.
+  async function listInputs() {
+    if (!navigator.mediaDevices) return [];
+    const devices = await navigator.mediaDevices.enumerateDevices().catch(() => []);
+    return devices.filter((d) => d.kind === "audioinput" && d.deviceId && !["default", "communications"].includes(d.deviceId))
+      .map((d) => ({ id: d.deviceId, label: d.label, channels: mic && mic.streams.has(d.deviceId) ? mic.streams.get(d.deviceId).channels : undefined }));
   }
   if (canRoute) navigator.mediaDevices.addEventListener("devicechange", reportOutputs);
+  // Plugging a mic in (or back in) mid-party picks it up without anyone toggling the mic.
+  if (navigator.mediaDevices) navigator.mediaDevices.addEventListener("devicechange", () => {
+    if (!mic) return;
+    mic.key = "";
+    syncMics().catch(() => {});
+  });
 
   async function unlockSpeakers() {
     try {
@@ -220,35 +241,79 @@
   const canMic = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.AudioContext);
   let mic = null, micState = canMic ? "off" : "unsupported", micStarting = null;
 
-  // A made-up room: noise that fades out. Longer and slower fades sound like bigger rooms.
-  function impulse(ctx, seconds, decay) {
-    const length = Math.floor(ctx.sampleRate * seconds);
-    const buffer = ctx.createBuffer(2, length, ctx.sampleRate);
-    for (let c = 0; c < 2; c++) {
-      const data = buffer.getChannelData(c);
-      for (let i = 0; i < length; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, decay);
+  // Each mic the host set up is one strip: a device, one of its channels (or all), a level and a
+  // balance. With none set up, the default microphone plays in the middle. Several strips can share
+  // a device (an interface with a mic in each input), and each device is opened once.
+  const stripsWanted = () => display.mics.length ? display.mics : [{ id: "", ch: 0, volume: 100, pan: 0 }];
+  const micKey = (list) => JSON.stringify(list.map((m) => [m.id, m.ch]));
+
+  async function openMic(m, id) {
+    const audio = { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: { ideal: 8 } };
+    if (id) audio.deviceId = { exact: id };
+    const stream = await navigator.mediaDevices.getUserMedia({ audio });
+    if (mic !== m) { // switched off while the browser was asking
+      stream.getTracks().forEach((t) => t.stop());
+      throw new Error("The mic was turned off");
     }
-    return buffer;
+    const channels = stream.getAudioTracks()[0].getSettings().channelCount || 2;
+    return { stream, source: m.ctx.createMediaStreamSource(stream), channels };
+  }
+
+  // Bring the open devices and strips in line with the host's list. Calls queue up, so a slider
+  // being dragged can't open a device twice. Only a change of device or channel rebuilds anything.
+  function syncMics() {
+    const m = mic;
+    m.queue = m.queue.then(async () => {
+      if (mic !== m) return;
+      const list = stripsWanted();
+      if (m.key !== micKey(list)) {
+        const wanted = new Set(list.map((x) => x.id));
+        for (const [id, open] of m.streams) {
+          if (wanted.has(id)) continue;
+          open.stream.getTracks().forEach((t) => t.stop());
+          m.streams.delete(id);
+        }
+        m.strips.forEach((strip) => strip.remove());
+        let error = null;
+        m.failed.clear(); // a mic that was unplugged gets another try whenever the list changes
+        for (const id of wanted) {
+          if (m.streams.has(id) || m.failed.has(id)) continue;
+          try { m.streams.set(id, await openMic(m, id)); } catch (e) { m.failed.add(id); error = error || e; }
+        }
+        if (mic !== m) return;
+        m.strips = list.map((x) => {
+          const open = m.streams.get(x.id);
+          return open ? m.chain.add(open.source, open.channels, x.ch) : { set() {}, remove() {} };
+        });
+        m.key = micKey(list);
+        if (error) {
+          if (!m.streams.size) throw error;
+          flash("Couldn't open one of the microphones.");
+        }
+        reportOutputs();
+      }
+      m.strips.forEach((strip, i) => strip.set(list[i]));
+    });
+    return m.queue;
   }
 
   async function startMic() {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-    });
     const ctx = new AudioContext({ latencyHint: "interactive" });
-    const level = ctx.createGain(), dry = ctx.createGain(), wet = ctx.createGain(), room = ctx.createConvolver();
-    room.buffer = impulse(ctx, 2.4, 3);
-    ctx.createMediaStreamSource(stream).connect(level);
-    level.connect(dry).connect(ctx.destination);
-    level.connect(room).connect(wet).connect(ctx.destination);
-    mic = { ctx, stream, level, dry, wet };
+    mic = { ctx, chain: KQVoice.build(ctx), streams: new Map(), strips: [], key: "", failed: new Set(), queue: Promise.resolve() };
+    mic.chain.mix.connect(ctx.destination);
     if (display.sink && ctx.setSinkId) ctx.setSinkId(display.sink).catch(() => {});
+    try {
+      await syncMics();
+    } catch (e) {
+      stopMic();
+      throw e;
+    }
   }
 
   function stopMic() {
     if (!mic) return;
     stopRecording(display.record);
-    mic.stream.getTracks().forEach((t) => t.stop());
+    for (const open of mic.streams.values()) open.stream.getTracks().forEach((t) => t.stop());
     mic.ctx.close();
     mic = null;
   }
@@ -278,10 +343,8 @@
     if (!mic) return;
     // Until someone taps the screen, the browser keeps the sound off.
     if (interacted && mic.ctx.state === "suspended") mic.ctx.resume();
-    const r = display.reverb / 100, now = mic.ctx.currentTime;
-    mic.level.gain.setTargetAtTime(display.muted ? 0 : (display.mic_volume / 100) * 1.5, now, 0.02);
-    mic.dry.gain.setTargetAtTime(1 - r * 0.35, now, 0.05);
-    mic.wet.gain.setTargetAtTime(r * 1.2, now, 0.05);
+    mic.chain.set({ volume: display.mic_volume, reverb: display.reverb, echo: display.echo, voice: display.voice, muted: display.muted });
+    syncMics().catch(() => flash("Couldn't open that microphone."));
   }
 
   // ---- Recording. When the host switches it on, this screen records each performance (the mic
@@ -294,10 +357,9 @@
 
   function startRecording(songId) {
     const out = mic.ctx.createMediaStreamDestination();
-    mic.dry.connect(out);
-    mic.wet.connect(out);
+    mic.chain.mix.connect(out);
     const recorder = new MediaRecorder(out.stream, { mimeType: recType });
-    const take = { song: songId, recorder, out, ctx: mic.ctx, dry: mic.dry, wet: mic.wet, music: null, chunks: [], started: Date.now() };
+    const take = { song: songId, recorder, out, ctx: mic.ctx, mix: mic.chain.mix, music: null, chunks: [], started: Date.now() };
     recorder.ondataavailable = (e) => { if (e.data.size) take.chunks.push(e.data); };
     rec = take;
     addMusic();
@@ -325,7 +387,7 @@
     const take = rec;
     rec = null;
     take.recorder.onstop = () => {
-      for (const node of [take.dry, take.wet, take.music]) { try { node && node.disconnect(take.out); } catch {} }
+      for (const node of [take.mix, take.music]) { try { node && node.disconnect(take.out); } catch {} }
       if (keep && take.chunks.length && Date.now() - take.started >= MIN_TAKE_MS) upload(take);
     };
     if (take.recorder.state !== "inactive") take.recorder.stop();

@@ -459,6 +459,9 @@
     ["split", "Split"], ["video", "Video"], ["queue", "Queue"], ["splash", "Join screen"], ["confidence", "Singer monitor"],
   ];
   const REVERBS = [[0, "Dry"], [25, "Room"], [55, "Hall"], [85, "Stadium"]];
+  const ECHOES = [[0, "Off"], [25, "Slap"], [60, "Big"]];
+  const VOICES = [["normal", "Normal"], ["chipmunk", "Chipmunk"]];
+  const MAX_MICS = 4;
   const STATE_TEXT = { idle: "Idle", playing: "Playing", paused: "Paused", buffering: "Loading", ended: "Finished" };
   const tiles = new Map(); // display id -> tile
   let guestUrl = location.origin + "/r/" + code;
@@ -635,7 +638,78 @@
     });
     const reverbButtons = REVERBS.map(([value, label]) => h("button", { type: "button", "data-reverb": value,
       onclick: () => { t.d = { ...t.d, reverb: value }; paint(); patch(id, { reverb: value }); } }, label));
+    const echoButtons = ECHOES.map(([value, label]) => h("button", { type: "button", "data-echo": value,
+      onclick: () => { t.d = { ...t.d, echo: value }; paint(); patch(id, { echo: value }); } }, label));
+    const voiceButtons = VOICES.map(([value, label]) => h("button", { type: "button", "data-voice": value,
+      onclick: () => { t.d = { ...t.d, voice: value }; paint(); patch(id, { voice: value }); } }, label));
     const micNote = noteEl();
+
+    // Up to four mics, each with its own level and left to right balance. A mic is a device and one
+    // of its inputs (a Scarlett 2i2 is one device with two). With none added, the default mic plays.
+    const micList = h("div", { class: "mic-list" });
+    const addMicBtn = h("button", { class: "ghost small", type: "button", onclick: () =>
+      setMics([...t.d.mics, { id: "", ch: 0, volume: 100, pan: 0 }], true) }, "Add a microphone");
+    const micListNote = noteEl();
+    let shownMics = "";
+    function setMics(mics, now) {
+      t.d = { ...t.d, mics };
+      t.volumeHeld = performance.now();
+      if (now) { paint(); patch(id, { mics }); return; }
+      pending = { ...(pending || {}), mics };
+      if (!timer) sendVolume();
+    }
+    function micRow(m, i, inputs) {
+      const edit = (change, now) => setMics(t.d.mics.map((x, j) => j === i ? { ...x, ...change } : x), now);
+      const known = inputs.find((x) => x.id === m.id);
+      const device = h("select", { "aria-label": "Microphone " + (i + 1), onchange: () => edit({ id: device.value, ch: 0 }, true) },
+        h("option", { value: "" }, "Default microphone"),
+        ...inputs.map((x) => h("option", { value: x.id }, x.label)),
+        ...(m.id && !known ? [h("option", { value: m.id }, "A microphone that's unplugged")] : []));
+      device.value = m.id;
+      const inputCount = Math.max(known && known.channels || 4, m.ch);
+      const channel = h("select", { "aria-label": "Input for microphone " + (i + 1), onchange: () => edit({ ch: Number(channel.value) }, true) },
+        h("option", { value: 0 }, "All inputs"),
+        ...Array.from({ length: inputCount }, (_, k) => h("option", { value: k + 1 }, "Input " + (k + 1))));
+      channel.value = m.ch;
+      const volume = h("input", { type: "range", min: 0, max: 100, step: 1, value: m.volume, class: "volume grow",
+        "aria-label": "Volume of microphone " + (i + 1), oninput: () => {
+          volume.style.setProperty("--fill", volume.value + "%");
+          edit({ volume: Number(volume.value) });
+        } });
+      volume.style.setProperty("--fill", m.volume + "%");
+      const pan = h("input", { type: "range", min: -100, max: 100, step: 5, value: m.pan, class: "volume grow is-muted",
+        "aria-label": "Left to right balance of microphone " + (i + 1), title: "Double-click to center",
+        oninput: () => edit({ pan: Number(pan.value) }), ondblclick: () => { pan.value = 0; edit({ pan: 0 }); } });
+      const remove = h("button", { class: "quiet small", type: "button", "aria-label": "Remove microphone " + (i + 1),
+        onclick: () => setMics(t.d.mics.filter((_, j) => j !== i), true) }, "Remove");
+      const row = h("div", { class: "mic-strip" },
+        h("div", { class: "mic-pick" }, device, channel, remove),
+        h("label", { class: "mic-slide" }, h("span", {}, "Level"), volume),
+        h("label", { class: "mic-slide" }, h("span", {}, "L"), pan, h("span", {}, "R")));
+      row.volume = volume;
+      row.pan = pan;
+      return row;
+    }
+    function paintMicList(s) {
+      const inputs = s.inputs || [], mics = s.mics || [];
+      const key = JSON.stringify([mics.map((m) => [m.id, m.ch]), inputs]);
+      if (key !== shownMics) {
+        shownMics = key;
+        micList.replaceChildren(...mics.map((m, i) => micRow(m, i, inputs)));
+      }
+      const dragging = performance.now() - t.volumeHeld < 1000;
+      [...micList.children].forEach((row, i) => {
+        if (!mics[i] || dragging) return;
+        row.volume.value = mics[i].volume;
+        row.volume.style.setProperty("--fill", mics[i].volume + "%");
+        row.pan.value = mics[i].pan;
+      });
+      addMicBtn.disabled = mics.length >= MAX_MICS;
+      setNote(micListNote, !mics.length ? "Using the default microphone, in the middle. Add one to choose which mic, and set its level and balance."
+        : inputs.length < 2 ? "Turn the mic on to list this screen's microphones."
+        : mics.length >= MAX_MICS ? "That's four, the most a screen mixes."
+        : "A Scarlett 2i2 is one device with two inputs: add it twice and pick Input 1 and Input 2.");
+    }
 
     // Recording: saves each song this screen plays, and it needs that screen's mic.
     const recBtn = h("button", { class: "ghost icon rec-btn", type: "button", onclick: () => {
@@ -717,8 +791,13 @@
     const micSetting = setting(id, "mic", "Mic", [micBtn, micSlider, micText], micNote);
     const reverbSetting = setting(id, "reverb", "Reverb",
       h("div", { class: "segmented grow", role: "group", "aria-label": "Reverb" }, reverbButtons));
+    const echoSetting = setting(id, "echo", "Echo",
+      h("div", { class: "segmented grow", role: "group", "aria-label": "Echo" }, echoButtons));
+    const voiceSetting = setting(id, "voice", "Voice",
+      h("div", { class: "segmented grow", role: "group", "aria-label": "Voice" }, voiceButtons));
+    const micsSetting = setting(id, "mics", "Microphones", [micList, addMicBtn], micListNote);
     const recSetting = setting(id, "record", "Record", [recBtn, recText], recNote);
-    const micGroup = h("div", { class: "tile-group" }, micSetting, reverbSetting, recSetting);
+    const micGroup = h("div", { class: "tile-group" }, micSetting, micsSetting, reverbSetting, echoSetting, voiceSetting, recSetting);
     const soundGroup = h("div", { class: "tile-group" },
       setting(id, "volume", "Volume", h("div", { class: "row volume-row grow" }, muteBtn, slider, volText)),
       speakers);
@@ -788,6 +867,9 @@
       micSlider.classList.toggle("is-muted", !s.mic);
       micText.textContent = s.mic ? s.mic_volume : "Off";
       for (const b of reverbButtons) b.setAttribute("aria-pressed", String(Number(b.dataset.reverb) === s.reverb));
+      for (const b of echoButtons) b.setAttribute("aria-pressed", String(Number(b.dataset.echo) === s.echo));
+      for (const b of voiceButtons) b.setAttribute("aria-pressed", String(b.dataset.voice === s.voice));
+      paintMicList(s);
       setNote(micNote, s.mic_state === "blocked"
         ? "The screen wasn't allowed to use its microphone. Allow it in that browser's site settings, then turn the mic on again."
         : s.mic && s.mic_state === "on" ? "Keep the mic behind the speakers, or it'll squeal." : "");
@@ -847,7 +929,7 @@
     t.update = (fresh) => {
       // Don't let a slow server echo yank the slider out from under a finger.
       const holding = performance.now() - t.volumeHeld < 1000;
-      t.d = holding ? { ...fresh, volume: t.d.volume, muted: t.d.muted, mic_volume: t.d.mic_volume } : fresh;
+      t.d = holding ? { ...fresh, volume: t.d.volume, muted: t.d.muted, mic_volume: t.d.mic_volume, mics: t.d.mics } : fresh;
       t.at = performance.now();
       paint();
     };

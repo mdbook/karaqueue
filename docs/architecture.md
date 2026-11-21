@@ -18,7 +18,7 @@ KaraQueue is deliberately small: one Python process, one SQLite file, and plain 
 | `karaqueue/desktop.py`, `karaqueue/desktop.html` | The desktop app: runs the server in a thread with per-user folders and a free port, and shows a pywebview window with a dashboard (guest address and QR code, tunnel switch) and the usual pages. `desktop-build/` builds it with PyInstaller. |
 | `karaqueue/limits.py` | Per-address rate limits. |
 | `karaqueue/guards.py` | Security headers, request size caps and slowing down password guessing. |
-| `karaqueue/static/` | The pages: `index.html` (home), `room.html` (guests), `host.html`, `screen.html` (TVs), `admin.html`, plus shared `kq.js`, the CD+G renderer `kq-cdg.js` and the styles. |
+| `karaqueue/static/` | The pages: `index.html` (home), `room.html` (guests), `host.html`, `screen.html` (TVs), `admin.html`, plus shared `kq.js`, the CD+G renderer `kq-cdg.js`, the singer voice chain `kq-voice.js` (mics, reverb, echo, chipmunk) and the styles. |
 
 ## How a song gets sung
 

@@ -26,14 +26,18 @@ ACTIONS = ("play", "pause", "restart", "identify", "fullscreen", "speakers")
 AUDIO = ("unsupported", "locked", "ready")
 STATES = ("idle", "playing", "paused", "buffering", "ended", "error")
 MICS = ("unsupported", "off", "on", "blocked")
+VOICES = ("normal", "chipmunk")
 DEFAULTS = {"name": "Screen", "layout": "split", "volume": 100, "muted": False, "sink": "",
-            "mic": False, "mic_volume": 80, "reverb": 25, "record": False}
+            "mic": False, "mic_volume": 80, "reverb": 25, "echo": 0, "voice": "normal", "mics": [],
+            "record": False}
 MAX_DISPLAYS = 12
 MAX_WAITING = 12  # screens waiting for the host at once, per room
 WAIT_SECONDS = 600  # a screen the host hasn't answered by then gives up its place and asks again
 CODE_DIGITS = 6  # in the code a waiting screen shows
 MAX_SOCKETS = 300  # ponytail: per room; a big party is well under this. Per address caps live in app.py.
 MAX_OUTPUTS = 20
+MAX_MICS = 4  # microphones one screen mixes at once
+MAX_CHANNELS = 8  # inputs on one audio interface a mic can come from
 SEND_TIMEOUT = 5  # seconds a socket gets to take a message before it's dropped
 MAX_TEXT = 200
 _ID = re.compile(r"^[A-Za-z0-9-]{8,40}$")
@@ -53,7 +57,7 @@ def settings(raw: dict, current: Optional[dict] = None) -> dict:
         if raw["layout"] not in LAYOUTS:
             raise Error("Unknown layout. Pick one of: " + ", ".join(LAYOUTS))
         out["layout"] = raw["layout"]
-    for key, label in (("volume", "Volume"), ("mic_volume", "Mic volume"), ("reverb", "Reverb")):
+    for key, label in (("volume", "Volume"), ("mic_volume", "Mic volume"), ("reverb", "Reverb"), ("echo", "Echo")):
         if raw.get(key) is not None:
             try:
                 out[key] = max(0, min(100, int(raw[key])))
@@ -62,16 +66,44 @@ def settings(raw: dict, current: Optional[dict] = None) -> dict:
     for key in ("muted", "mic", "record"):
         if raw.get(key) is not None:
             out[key] = bool(raw[key])
+    if raw.get("voice") is not None:
+        if raw["voice"] not in VOICES:
+            raise Error("Unknown voice. Pick one of: " + ", ".join(VOICES))
+        out["voice"] = raw["voice"]
     if raw.get("sink") is not None:
         # An audio output id the screen reported; "" means the device default.
         if not isinstance(raw["sink"], str) or len(raw["sink"]) > MAX_TEXT:
             raise Error("Speaker must be one of the outputs the screen reported")
         out["sink"] = raw["sink"]
+    if raw.get("mics") is not None:
+        out["mics"] = _mics(raw["mics"])
     return out
 
 
-def outputs(raw) -> list:
-    """Validate the audio outputs a screen says it has. Blank labels get a readable name."""
+def _mics(raw) -> list:
+    """The mic strips a screen mixes: which device and channel, and each one's level and balance."""
+    if not isinstance(raw, list) or len(raw) > MAX_MICS:
+        raise Error(f"A screen mixes up to {MAX_MICS} microphones")
+    out = []
+    for item in raw:
+        if not isinstance(item, dict):
+            raise Error("Each microphone needs a device, channel, volume and balance")
+        try:
+            mic = {"id": item.get("id", ""), "ch": int(item.get("ch", 0)),
+                   "volume": max(0, min(100, int(item.get("volume", 100)))),
+                   "pan": max(-100, min(100, int(item.get("pan", 0))))}
+        except (TypeError, ValueError):
+            raise Error("A microphone's channel, volume and balance must be numbers")
+        if not isinstance(mic["id"], str) or len(mic["id"]) > MAX_TEXT:
+            raise Error("Microphone must be one of the devices the screen reported")
+        if not 0 <= mic["ch"] <= MAX_CHANNELS:
+            raise Error(f"A microphone's channel is 0 (all) to {MAX_CHANNELS}")
+        out.append(mic)
+    return out
+
+
+def outputs(raw, name: str = "Speaker") -> list:
+    """Validate the audio devices (speakers or mics) a screen says it has. Blank labels get a readable name."""
     if not isinstance(raw, list):
         return []
     out = []
@@ -81,8 +113,12 @@ def outputs(raw) -> list:
         output_id, label = item.get("id"), item.get("label", "")
         if not isinstance(output_id, str) or not isinstance(label, str) or len(output_id) > MAX_TEXT:
             continue
-        label = " ".join(label.split())[:MAX_TEXT] or f"Speaker {len(out) + 1}"
-        out.append({"id": output_id, "label": label})
+        label = " ".join(label.split())[:MAX_TEXT] or f"{name} {len(out) + 1}"
+        device = {"id": output_id, "label": label}
+        channels = item.get("channels")
+        if isinstance(channels, int) and 1 <= channels <= MAX_CHANNELS:
+            device["channels"] = channels  # how many inputs a mic device has, once the screen has opened it
+        out.append(device)
     return out
 
 
@@ -197,7 +233,7 @@ class Hub:
         upload = secrets.token_urlsafe(24)
         # A "panel" is the host page itself playing the sound, with no picture of its own.
         room[display_id] = {"ws": ws, "settings": saved, "status": {"state": "idle", "mic_state": "unsupported", "recording": False, "reason": ""},
-                            "audio": "unsupported", "outputs": [], "upload": upload, "panel": info.get("panel") is True}
+                            "audio": "unsupported", "outputs": [], "inputs": [], "upload": upload, "panel": info.get("panel") is True}
         welcome = {"type": "welcome", "upload": upload, "settings": saved, "sound": self.store.sound(code)}
         if key:
             welcome["key"] = key  # the screen keeps it, to come back without asking again
@@ -251,6 +287,7 @@ class Hub:
                     audio = message.get("audio")
                     display["audio"] = audio if audio in AUDIO else "unsupported"
                     display["outputs"] = outputs(message.get("outputs"))
+                    display["inputs"] = outputs(message.get("inputs"), "Microphone")
                     await self.send(code, {"type": "displays"})
         elif kind == "status":
             for display in room.values():
@@ -325,7 +362,7 @@ class Hub:
 
 def _public(display_id: str, display: dict) -> dict:
     return {"id": display_id, **display["settings"], **display["status"],
-            "audio": display["audio"], "outputs": display["outputs"], "panel": display["panel"]}
+            "audio": display["audio"], "outputs": display["outputs"], "inputs": display["inputs"], "panel": display["panel"]}
 
 
 async def _try_send(ws: WebSocket, message: dict) -> bool:

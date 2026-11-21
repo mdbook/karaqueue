@@ -131,9 +131,10 @@ def test_screens_show_up_for_the_host_and_take_commands():
         assert client.get(f"/api/rooms/{code}/displays", headers=alex).status_code == 403
         [screen] = client.get(f"/api/rooms/{code}/displays", headers=host).json()
         assert screen == {"id": "tv-1234abcd", "name": "Bar TV", "layout": "video", "volume": 100,
-                          "muted": False, "sink": "", "mic": False, "mic_volume": 80, "reverb": 25, "record": False,
+                          "muted": False, "sink": "", "mic": False, "mic_volume": 80, "reverb": 25, "echo": 0, "voice": "normal",
+                          "mics": [], "record": False,
                           "state": "playing", "mic_state": "on", "recording": True, "time": 12.3, "duration": None,
-                          "reason": "", "audio": "unsupported", "outputs": [], "panel": False}
+                          "reason": "", "audio": "unsupported", "outputs": [], "inputs": [], "panel": False}
         # A song that won't play says why, for the host's panel.
         tv.send_json({"type": "status", "state": "error", "reason": "  YouTube won't\nplay this " + "x" * 300})
         assert tv.receive_json() == {"type": "displays"}
@@ -151,6 +152,13 @@ def test_screens_show_up_for_the_host_and_take_commands():
         assert len(screen["outputs"]) == 17  # 20 looked at, 3 of them malformed
         assert screen["audio"] == "ready"
 
+        tv.send_json({"type": "outputs", "audio": "ready", "outputs": [], "inputs": [
+            {"id": "usb-1", "label": "Scarlett 2i2", "channels": 2}, {"id": "usb-2", "label": ""}, {"id": "usb-3", "channels": 99}]})
+        assert tv.receive_json() == {"type": "displays"}
+        [screen] = client.get(f"/api/rooms/{code}/displays", headers=host).json()
+        assert screen["inputs"] == [{"id": "usb-1", "label": "Scarlett 2i2", "channels": 2},
+                                    {"id": "usb-2", "label": "Microphone 2"}, {"id": "usb-3", "label": "Microphone 3"}]
+
         url = f"/api/rooms/{code}/displays/tv-1234abcd"
         assert client.patch(url, headers=host, json={"layout": "disco"}).status_code == 400
         assert client.patch(url, headers=host, json={"action": "explode"}).status_code == 400
@@ -163,6 +171,7 @@ def test_screens_show_up_for_the_host_and_take_commands():
         assert command["type"] == "command" and command["action"] == "pause"
         assert command["settings"]["layout"] == "queue"
         assert client.patch(url, headers=host, json={"sink": "y" * 201}).status_code == 400
+
         assert client.patch(url, headers=host, json={"sink": "hdmi-1"}).json()["sink"] == "hdmi-1"
         assert tv.receive_json() == {"type": "displays"}  # from the pause PATCH
         assert tv.receive_json()["settings"]["sink"] == "hdmi-1"
@@ -171,6 +180,27 @@ def test_screens_show_up_for_the_host_and_take_commands():
         tv.send_text("not json")  # ignored
         assert tv.receive_json() == {"type": "displays"}  # from the PATCH above
         assert len(client.get(f"/api/rooms/{code}/displays", headers=host).json()) == 1
+
+        def command():  # the next command, skipping the "displays" pings in between
+            while (message := tv.receive_json())["type"] != "command":
+                pass
+            return message
+
+        # Effects and up to four mics, each with its own level and balance.
+        assert client.patch(url, headers=host, json={"voice": "demon"}).status_code == 400
+        res = client.patch(url, headers=host, json={"voice": "chipmunk", "echo": 250})
+        assert res.json()["voice"] == "chipmunk" and res.json()["echo"] == 100
+        assert command()["settings"]["voice"] == "chipmunk"
+        mics = [{"id": "usb-1", "ch": 1, "volume": 90, "pan": -100}, {"id": "usb-1", "ch": 2, "volume": 150, "pan": 300}]
+        res = client.patch(url, headers=host, json={"mics": mics})
+        assert res.json()["mics"] == [{"id": "usb-1", "ch": 1, "volume": 90, "pan": -100},
+                                      {"id": "usb-1", "ch": 2, "volume": 100, "pan": 100}]
+        assert command()["settings"]["mics"][1]["pan"] == 100
+        for bad in ([{"id": "a", "ch": 0}] * 5, [{"id": 7}], ["usb-1"], [{"id": "a", "ch": 9}], [{"id": "a", "pan": "left"}],
+                    [{"id": "x" * 201}]):
+            assert client.patch(url, headers=host, json={"mics": bad}).status_code == 400, bad
+        assert client.patch(url, headers=host, json={"mics": "usb-1"}).status_code == 422
+        assert client.patch(url, headers=host, json={"mics": []}).json()["mics"] == []
 
     assert client.get(f"/api/rooms/{code}/displays", headers=host).json() == []
     assert client.patch(f"/api/rooms/{code}/displays/tv-1234abcd", headers=host, json={}).status_code == 404
