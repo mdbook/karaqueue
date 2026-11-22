@@ -23,7 +23,8 @@ Homepage = "https://github.com/mdbook/karaqueue"
 Issues = "https://github.com/mdbook/karaqueue/issues"
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "httpx>=0.27"]
+oidc = ["PyJWT[crypto]>=2.10"]
+dev = ["pytest>=8", "httpx>=0.27", "PyJWT[crypto]>=2.10"]
 ui = ["playwright>=1.40"]
 desktop = ["pywebview>=5"]
 

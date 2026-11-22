@@ -21,7 +21,7 @@ from urllib.parse import quote, urlsplit
 
 import segno
 from fastapi import Depends, FastAPI, Header, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -32,6 +32,7 @@ from .downloads import search as ytdlp_search
 from .guards import Logins, Protect
 from .limits import SOCKETS, Limiter
 from .media import Library, lookup, naming_rule
+from .oidc import COOKIE as OIDC_COOKIE, SESSION_COOKIE as OIDC_SESSION_COOKIE, SECONDS as OIDC_SECONDS, OIDC
 from .public import PublicAccess, default_gateway, in_container, listen_port, local_ip_for
 from .tunnel import Tunnel
 from .settings import PUBLIC_ACCESS, RULES_KEY, TUNNEL, SECRET, Settings, _scrypt, env_name, hash_password, password_matches
@@ -252,6 +253,7 @@ def create_app(store: Optional[Store] = None) -> FastAPI:
         store = Store(path=db)
         setup_file = Path(db).resolve().parent / "admin-setup-link.txt"
     cfg = Settings(store, setup_file=setup_file)
+    oidc = OIDC(cfg.get)
     # Dynamic DNS and the router port forward, in a thread that runs while the server does.
     # The store keeps any forward still on the router, so one left by a crash comes off next start.
     public = PublicAccess(cfg.get, listen_port(), store)
@@ -398,6 +400,7 @@ def create_app(store: Optional[Store] = None) -> FastAPI:
         bucket = ("create" if method == "POST" and parts == ["api", "rooms"] else
                   "join" if method == "POST" and in_room and parts[3:] == ["singers"] else
                   "account" if method == "POST" and parts == ["api", "guests"] else
+                  "link" if method == "GET" and parts == ["auth", "oidc", "start"] and oidc.enabled() else
                   "link" if method == "POST" and in_room and parts[3:4] == ["singers"] and parts[5:] == ["link"] else
                   "search" if method == "GET" and in_room and parts[3:] == ["search"] else None)
         if bucket and not limiter.take(bucket, who, scale):
@@ -426,7 +429,7 @@ def create_app(store: Optional[Store] = None) -> FastAPI:
         return {"youtube_search": bool(cfg.get("youtube_api_key") or downloads() or saver()), "library": library() is not None,
                 "recordings": recordings_dir() is not None, "downloads": downloads() is not None,
                 "saving": saver() is not None and cfg.get("who_saves") == "hosts",
-                "accounts_only": cfg.get("new_rooms") == "accounts"}
+                "accounts_only": cfg.get("new_rooms") == "accounts", **oidc.public()}
 
     # Every search runs yt-dlp or spends API quota, and party guests search the same songs, so
     # answers are kept a while. ponytail: two searches at once for the whole server, and the
@@ -890,16 +893,63 @@ def create_app(store: Optional[Store] = None) -> FastAPI:
 
     # -- the admin page: settings for the whole server ---------------------------
 
+    @app.get("/auth/oidc/start", include_in_schema=False)
+    def oidc_start(request: Request, target: str = "home"):
+        if not oidc.enabled():
+            raise Error("SSO isn't enabled on this server", 404)
+        if target not in ("home", "admin"):
+            raise Error("Choose the home or admin page", 400)
+        home = cfg.get("public_url") or str(request.base_url).rstrip("/")
+        uri = home + "/auth/oidc/callback"
+        location, browser = oidc.start(uri, target)
+        response = RedirectResponse(location, status_code=303)
+        response.set_cookie(OIDC_COOKIE, browser, max_age=OIDC_SECONDS, httponly=True,
+                            secure=uri.startswith("https://"), samesite="lax", path="/auth/oidc")
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        return response
+
+    @app.get("/auth/oidc/callback", include_in_schema=False)
+    def oidc_callback(request: Request, state: str = "", code: str = ""):
+        issuer, subject, name, role, target = oidc.finish(state, request.cookies.get(OIDC_COOKIE, ""), code)
+        user_id = store.oidc_user(issuer, subject, name, role, hash_password(secrets.token_urlsafe(32)))
+        tok = store.start_staff_session(user_id, device(request.headers.get("user-agent", "")))
+        # A short-lived, browser-bound handoff, not a token in a URL. The page moves it into the
+        # same local storage used by password sign-in. A made-up fragment can't sign anyone in.
+        response = RedirectResponse(("/admin" if target == "admin" else "/") + "#oidc=1", status_code=303)
+        response.delete_cookie(OIDC_COOKIE, path="/auth/oidc")
+        response.set_cookie(OIDC_SESSION_COOKIE, tok, max_age=60, httponly=True, samesite="strict",
+                            secure=(cfg.get("public_url") or str(request.base_url)).startswith("https://"),
+                            path="/auth/oidc")
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        return response
+
+    @app.post("/auth/oidc/session", include_in_schema=False)
+    def oidc_session(request: Request):
+        if not oidc.enabled():
+            raise Error("SSO isn't enabled on this server", 404)
+        # A custom header forbids cross-site forms and fetches (there is no CORS grant).
+        if request.headers.get("X-KaraQueue-OIDC") != "1":
+            raise Error("Start signing in again", 403)
+        tok = request.cookies.get(OIDC_SESSION_COOKIE)
+        who = cfg.require(tok, role="host")
+        response = JSONResponse({"token": tok, **who}, headers={"Cache-Control": "no-store"})
+        response.delete_cookie(OIDC_SESSION_COOKIE, path="/auth/oidc")
+        return response
+
     def admin(tok: Optional[str] = Depends(token)) -> dict:
         return cfg.require(tok)
 
     @app.get("/api/admin/status")
     def admin_status():
-        return {"setup": cfg.setup_token is not None, "password_env": cfg.password_from_env()}
+        return {"setup": cfg.setup_token is not None, "password_env": cfg.password_from_env(), **oidc.public()}
 
     @app.post("/api/admin/login")
     def admin_login(body: PasswordIn, request: Request):
         """Admins sign in here for the admin page, and hosts to start rooms when that needs an account."""
+        if oidc.only():
+            raise Error("Use SSO to sign in on this server", 403)
         keys = [("address", address(request)),
                 ("name", (body.name or "").strip().lower())]
         # The admin password (no name) locked by wrong tries from elsewhere still lets in an address
@@ -939,6 +989,8 @@ def create_app(store: Optional[Store] = None) -> FastAPI:
 
     @app.post("/api/invites/accept")
     def accept_invite(body: AcceptIn, request: Request):
+        if oidc.only():
+            raise Error("Use SSO to sign in on this server", 403)
         tok = cfg.accept_invite(body.link, body.password, body.name, device(request.headers.get("user-agent", "")))
         return {"token": tok, **cfg.whoami(tok)}
 

@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS settings (
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL UNIQUE COLLATE NOCASE,
-    role TEXT NOT NULL CHECK (role IN ('admin', 'host')),
+    role TEXT NOT NULL CHECK (role IN ('admin', 'host', 'none')),
     password TEXT NOT NULL,
     disabled INTEGER NOT NULL DEFAULT 0,
     created_at REAL NOT NULL,
@@ -74,6 +74,12 @@ CREATE TABLE IF NOT EXISTS staff_sessions (
     device TEXT NOT NULL DEFAULT '',
     created_at REAL NOT NULL,
     seen_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS oidc_accounts (
+    issuer TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    PRIMARY KEY (issuer, subject)
 );
 CREATE TABLE IF NOT EXISTS invites (
     token_hash TEXT PRIMARY KEY,
@@ -225,6 +231,21 @@ class Store:
         # Or this, from before a link died with its maker's access.
         if "made_by_id" not in [c[1] for c in self.db.execute("PRAGMA table_info(invites)")]:
             self.db.execute("ALTER TABLE invites ADD COLUMN made_by_id INTEGER REFERENCES users(id) ON DELETE CASCADE")
+        # Keep linked accounts with no provider access, without turning them off locally.
+        if "'none'" not in self.db.execute("SELECT sql FROM sqlite_master WHERE name = 'users'").fetchone()[0]:
+            self.db.commit()
+            self.db.execute("PRAGMA foreign_keys = OFF")
+            try:
+                with self.db:
+                    self.db.execute("BEGIN")
+                    self.db.execute("CREATE TABLE users_new (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE, "
+                                    "role TEXT NOT NULL CHECK (role IN ('admin', 'host', 'none')), password TEXT NOT NULL, "
+                                    "disabled INTEGER NOT NULL DEFAULT 0, created_at REAL NOT NULL, seen_at REAL)")
+                    self.db.execute("INSERT INTO users_new SELECT id, name, role, password, disabled, created_at, seen_at FROM users")
+                    self.db.execute("DROP TABLE users")
+                    self.db.execute("ALTER TABLE users_new RENAME TO users")
+            finally:
+                self.db.execute("PRAGMA foreign_keys = ON")
         self.lock = threading.RLock()
         self.name_limit = name_limit
         self.text_limit = text_limit
@@ -595,6 +616,43 @@ class Store:
         with self.lock, self.db:
             if not self.db.execute("DELETE FROM users WHERE id = ?", (user_id,)).rowcount:
                 raise Error("No such account", 404)
+
+    def oidc_user(self, issuer: str, subject: str, name: str, role: str, password: str) -> int:
+        """Only issuer + subject links accounts. Never trust a matching name or email to link one."""
+        with self.lock, self.db:
+            linked = self._one("SELECT user_id FROM oidc_accounts WHERE issuer = ? AND subject = ?", issuer, subject)
+            user = self.user(linked["user_id"]) if linked else None
+            if user and user["disabled"]:
+                raise Error("This account is turned off. Ask an admin to turn it back on.", 403)
+            if role not in ("admin", "host"):
+                if user:
+                    self.db.execute("UPDATE users SET role = 'none' WHERE id = ?", (user["id"],))
+                    self.db.execute("DELETE FROM staff_sessions WHERE user_id = ?", (user["id"],))
+                    self.db.execute("DELETE FROM invites WHERE made_by_id = ? OR user_id = ?", (user["id"], user["id"]))
+                    # Refusing this sign-in must not roll back the loss of access.
+                    self.db.commit()
+                raise Error("Your sign-in doesn't give you host access. Ask an admin.", 403)
+            if user:
+                self.update_user(user["id"], role=role)
+                if role != "admin":
+                    self.drop_invites_by(user["id"])
+                return user["id"]
+            # Provider names aren't unique or permanent. Keep the local name stable after creation.
+            try:
+                base = _clean(name[:self.name_limit], "Name", self.name_limit)
+            except Error:
+                base = "Host"[:self.name_limit]
+            candidate = base
+            for _ in range(100):
+                if not self._named("users", candidate):
+                    break
+                candidate = secrets.token_hex(16)[:self.name_limit]
+            else:
+                raise Error("Couldn't pick an account name. Ask an admin to raise the name limit.", 409)
+            user_id = self.add_user(candidate, role, password)
+            self.db.execute("INSERT INTO oidc_accounts (issuer, subject, user_id) VALUES (?, ?, ?)",
+                            (issuer, subject, user_id))
+            return user_id
 
     # -- where admins and hosts are signed in; user_id None is the built-in admin password --
 

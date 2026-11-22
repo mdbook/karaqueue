@@ -24,6 +24,7 @@
           <form id="join"><label for="code">Enter your room code</label><div class="entry-row"><input id="code" placeholder="ABC234" maxlength="12" required autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false"><button>Join room</button></div><p class="entry-hint">Find it on the big screen. No account needed.</p></form>
         </div>
         <div id="host-panel" role="tabpanel" aria-labelledby="host-tab" hidden>
+          <div id="sso" hidden></div>
           <form id="account-form" class="account-form" hidden><label for="account-name">Sign in to start a room</label><div class="entry-row"><input id="account-name" placeholder="Your name (empty for the admin password)" autocomplete="username" spellcheck="false"><input id="account-pw" type="password" placeholder="Password" autocomplete="current-password" required aria-label="Password"><button>Sign in</button></div><p class="entry-hint">This server asks hosts to sign in. Joining a room never needs an account.</p></form>
           <form id="create"><label for="name">Give your night a name</label><div class="entry-row"><input id="name" placeholder="Friday night karaoke" maxlength="120" autocomplete="off" required><button>Start a room</button></div><p class="entry-hint">You bring the people. We'll keep the queue moving.</p></form>
         </div>
@@ -65,6 +66,8 @@ tabs.forEach(tab => {
   };
   // When the server only lets account holders start rooms, sign in first; the key is kept like a room key.
   const create = document.getElementById("create"), accountForm = document.getElementById("account-form");
+  const sso = document.getElementById("sso");
+  let ssoConfig = null;
   const hint = create.querySelector(".entry-hint"), hintText = hint.textContent;
   // Signed in on the admin page counts too: admins can start rooms.
   const signedIn = () => keys.get("account") || (keys.get("admin") ? { ...keys.get("admin"), name: "admin" } : null);
@@ -76,13 +79,21 @@ tabs.forEach(tab => {
   };
   function showAccount(needed) {
     const account = signedIn();
-    accountForm.hidden = !needed || !!account;
+    accountForm.hidden = !needed || !!account || !!ssoConfig?.only;
+    sso.hidden = !needed || !!account || !ssoConfig;
     create.hidden = needed && !account;
     hint.replaceChildren(needed && account
       ? h("span", {}, "Signed in as " + account.name + ". ", h("a", { href: "#", onclick: (e) => { e.preventDefault(); signOut(); showAccount(true); } }, "Sign out"))
       : hintText);
   }
-  fetch("/api/config").then((r) => r.json()).then((cfg) => showAccount(!!cfg.accounts_only)).catch(() => {});
+  act(async () => {
+    const arrived = await receiveOIDC().catch((err) => { flash(err.message); return false; });
+    const cfg = await (await fetch("/api/config")).json();
+    ssoConfig = cfg.oidc;
+    if (ssoConfig) sso.replaceChildren(h("button", { type: "button", onclick: () => location.assign("/auth/oidc/start") }, ssoConfig.name));
+    showAccount(!!cfg.accounts_only);
+    if (arrived) document.getElementById("host-tab").click();
+  })();
   accountForm.onsubmit = act(async (e) => {
     e.preventDefault();
     const res = await fetch("/api/admin/login", {

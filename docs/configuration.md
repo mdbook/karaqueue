@@ -13,6 +13,15 @@ Apart from the ones marked "set at startup only", you can also change any of the
 | `KARAQUEUE_ALLOWED_FOLDERS` | (the folders below) | Folders, separated by `:`, that the admin page may point the library, downloads and recordings at. Set at startup only. |
 | `KARAQUEUE_PUBLIC_URL` | (from the request) | The address guests should use, for the join link and QR code. Set this if you run behind a reverse proxy. |
 | `KARAQUEUE_NEW_ROOMS` | `accounts` | Who can start rooms: `accounts` for people with an account or the admin password (see [Accounts](admin.md#accounts)), or `anyone` who can reach the server. |
+| `KARAQUEUE_OIDC_ISSUER` | (none) | OIDC issuer URL. Empty turns SSO off. Install the optional OIDC extra first, see [Sign in with OIDC](admin.md#sign-in-with-oidc). |
+| `KARAQUEUE_OIDC_CLIENT_ID` | (none) | Client ID registered with the provider. |
+| `KARAQUEUE_OIDC_CLIENT_SECRET` | (none) | Client secret, hidden on the admin page. Empty for a public PKCE client. |
+| `KARAQUEUE_OIDC_NAME` | `Sign in with SSO` | Button label on the home and admin pages. |
+| `KARAQUEUE_OIDC_SCOPES` | `openid profile email` | Space-separated scopes. Must include `openid`. |
+| `KARAQUEUE_OIDC_DEFAULT_ROLE` | `host` | `host` or `none`. With `none`, only the admin group gets access. |
+| `KARAQUEUE_OIDC_ADMIN_GROUP` | (none) | Exact group name that grants admin access. Empty disables group mapping. |
+| `KARAQUEUE_OIDC_GROUPS_CLAIM` | `groups` | ID token claim holding an array of group names. |
+| `KARAQUEUE_OIDC_ONLY` | `off` | `on` disables host/admin password and invite sign-in while an issuer is configured. Guest sign-in is unchanged. |
 | `KARAQUEUE_SINGERS_PER_ROOM` | `100` | How many guests can join one room. The host can still add more by hand. |
 | `KARAQUEUE_SCREENS_PER_ADDRESS` | `4` | How many screens on one internet connection can wait for the host to let them in at once. |
 | `KARAQUEUE_SONGS_PER_SINGER` | `10` | How many songs a guest can have queued at once. The host isn't limited. |

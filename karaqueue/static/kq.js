@@ -11,6 +11,20 @@ const keys = {
   drop: (room) => localStorage.removeItem("kq:" + room),
 };
 
+// The callback leaves only a marker in the URL. A short-lived HttpOnly cookie binds the
+// handoff to this browser, so copying a link can't sign another browser into your account.
+async function receiveOIDC() {
+  if (new URLSearchParams(location.hash.slice(1)).get("oidc") !== "1") return false;
+  history.replaceState(null, "", location.pathname + location.search);
+  const res = await fetch("/auth/oidc/session", { method: "POST", headers: { "X-KaraQueue-OIDC": "1" } });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "Couldn't finish signing in. Try again.");
+  keys.set("account", { token: data.token, name: data.name });
+  if (data.role === "admin") keys.set("admin", { token: data.token });
+  else keys.drop("admin");
+  return true;
+}
+
 async function api(method, path, body) {
   const saved = keys.get(code);
   const headers = { "Content-Type": "application/json" };

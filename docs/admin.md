@@ -25,6 +25,32 @@ Everyone is in one list under People: admins, hosts and guest accounts, with a s
 
 **Guest accounts** are in the same list. Guests make their own from the join page, with a name and a password and no email, and an account gets them back to their spot from any phone, in any room. Since there's no email, a guest who forgets their password asks an admin, who can set a new one, turn the account off or delete it. Changing the password, turning one off, or signing it out everywhere signs it out on every phone, in every room. Deleting one leaves its singers in their rooms. A guest who joined before making an account can tap Tie this spot to an account, at the bottom of their page on that same phone, and sign in or make one there.
 
+## Sign in with OIDC
+
+Let your usual sign-in provider look after hosts and admins. Guests still join with their room code or QR code, and room links and TV screens work just as before. Nothing changes while the issuer is empty.
+
+Install the optional extra in the server's Python environment: `pip install 'karaqueue[oidc]'` (or `pip install '.[oidc]'` from a checkout). It adds PyJWT with its crypto backend, so token signatures are checked by a maintained library rather than our own crypto code. The regular install stays small. The stock container doesn't include optional extras; an image used for SSO needs this extra installed too.
+
+Register an OpenID Connect client with your provider. Choose authorization code with PKCE (S256), and register this exact redirect URI: `https://karaoke.example.com/auth/oidc/callback`. Use your server's public address instead. Set these in the environment, or under Sign-in in the admin Settings page:
+
+```text
+KARAQUEUE_PUBLIC_URL=https://karaoke.example.com
+KARAQUEUE_NEW_ROOMS=accounts
+KARAQUEUE_OIDC_ISSUER=https://login.example.com/realms/party
+KARAQUEUE_OIDC_CLIENT_ID=karaqueue
+KARAQUEUE_OIDC_CLIENT_SECRET=<your client secret>
+```
+
+Use the provider's issuer exactly, including a trailing slash if it has one. KaraQueue reads its discovery document and signing keys. The provider must sign ID tokens with RSA, RSA-PSS or ECDSA, and support `client_secret_basic`, `client_secret_post`, or `none` for a public PKCE client. The default scopes are `openid profile email`; add any scope your provider needs to include groups in the ID token. Provider connections need https, apart from a loopback address for local testing. Behind a reverse proxy, set `KARAQUEUE_PUBLIC_URL` so the redirect and cookie use the public https address. Otherwise they use the request's scheme and host. Don't trust forwarding headers from strangers; see [Behind a reverse proxy](install.md#behind-a-reverse-proxy).
+
+For example, with Authentik, make an OAuth2/OpenID provider and application for KaraQueue. Pick a signing key, use a confidential client, enable the authorization code flow, and add the redirect URI above as an exact match. Use the issuer shown in the provider's OpenID configuration, such as `https://login.example.com/application/o/karaqueue/`. Copy its client ID and secret into the settings. If you want group mapping, include a scope mapping that puts the group names in an ID token array, usually `groups`.
+
+By default each new SSO account is a host. To give one group admin access, set `KARAQUEUE_OIDC_ADMIN_GROUP=karaqueue-admins`. Set `KARAQUEUE_OIDC_GROUPS_CLAIM` if the provider uses a claim other than `groups`. Group names match exactly. Set `KARAQUEUE_OIDC_DEFAULT_ROLE=none` to refuse everyone outside the admin group. Role mapping is applied at each sign-in, including to existing SSO accounts. A refused account loses its role, sign-ins and outstanding account links. It can sign in again if the provider grants access later, unless it's turned off under People. Remove access right away by turning the account off under People or signing it out everywhere.
+
+Accounts are linked by issuer and subject, never by name or email. Signing in again finds the same account, even if the provider changes its name. A matching local name doesn't link or take over an existing password account. New SSO accounts have no known password; an admin can set one later. You can rename, turn off, delete or sign them out like any other account. Their sign-ins use the same 30-day idle expiry and ten-device cap as password sign-ins, and survive a restart. A sign-in in progress expires after ten minutes and needs restarting if the server restarts.
+
+The home page's Host a night tab and the admin page show **Sign in with SSO**. Change the label with `KARAQUEUE_OIDC_NAME`. Password sign-in stays available unless you set `KARAQUEUE_OIDC_ONLY=on`; that also refuses password-based invite sign-in for hosts and admins. Guest accounts are unaffected. Check an SSO admin can get in before turning it on. To recover, turn it off or clear the issuer using the same place you set it (a saved admin setting beats the environment).
+
 ## How sign-in works
 
 Guests don't need passwords, and hosts only need one when the server asks hosts to sign in (see [Accounts](#accounts)). Creating a room gives your browser a host key, and joining gives it a singer key. Keys are random, the server only stores a hash of them, and they live in your browser's local storage. Clearing your browser data signs you out of that room, but you can get back in: Use another phone on your own page, or Sign in their phone in the host's menu for each singer, shows a QR code that signs a phone in as that singer. It works once, for 10 minutes, a new one replaces the last, and the code travels after the `#` in the link, so it never shows up in a proxy's logs. One singer can be signed in on 5 phones at once; a sixth signs the oldest out. A guest account does the same thing without the host: sign in and Join as yourself, and you're back on your spot. Guest account passwords are stored as salted scrypt hashes and their sign-ins are saved, so they survive a restart, for up to 180 days. The admin password and account passwords are stored as salted scrypt hashes. Admin and host sign-ins are saved too, so a restart doesn't sign anyone out, and they end after 30 days without use; one account can be signed in on 10 devices at once. Starting the server with a new `KARAQUEUE_ADMIN_PASSWORD` signs out everyone using the old one. Invite and password links are random, stored only as a hash, travel after the `#` like the QR codes, and work once.

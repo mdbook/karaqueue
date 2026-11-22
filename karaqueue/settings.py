@@ -33,6 +33,15 @@ SETTINGS = [
     ("new_rooms", str, "accounts", "Rooms", "Who can start rooms",
      "Only people with an account (add them under Access), or anyone who can reach the server. "
      "Guests never need an account to join."),
+    ("oidc_issuer", str, "", "Sign-in", "OIDC issuer", "Your provider's issuer URL. Empty turns SSO off."),
+    ("oidc_client_id", str, "", "Sign-in", "OIDC client ID", "The client registered with your provider."),
+    ("oidc_client_secret", str, "", "Sign-in", "OIDC client secret", "Kept secret. Empty for a public PKCE client."),
+    ("oidc_name", str, "Sign in with SSO", "Sign-in", "SSO button", "The sign-in button's label."),
+    ("oidc_scopes", str, "openid profile email", "Sign-in", "OIDC scopes", "Space-separated scopes, including openid."),
+    ("oidc_default_role", str, "host", "Sign-in", "Default SSO role", "Host, or no access without the admin group."),
+    ("oidc_admin_group", str, "", "Sign-in", "SSO admin group", "An exact group name that grants admin access. Empty disables it."),
+    ("oidc_groups_claim", str, "groups", "Sign-in", "Groups claim", "The ID token claim holding a list of group names."),
+    ("oidc_only", str, "off", "Sign-in", "SSO only", "On disables password sign-in for hosts and admins, not guests."),
     ("singers_per_room", int, 100, "Rooms", "Singers per room",
      "Guests who can join one room. The host can still add more by hand."),
     ("screens_per_address", int, 4, "Rooms", "Screens asking to join from one network",
@@ -118,7 +127,7 @@ SETTINGS = [
      "Point it at an https server in front of KaraQueue, like Caddy on 443, so passwords don't travel "
      "unencrypted. Set by KARAQUEUE_FORWARD_TO_PORT only, so the admin page can't open other programs to the internet."),
 ]
-SECRET = {"youtube_api_key", "ddns_token", "ddns_url", "tunnel_token"}
+SECRET = {"youtube_api_key", "ddns_token", "ddns_url", "tunnel_token", "oidc_client_secret"}
 # Shown on the admin page but only changed in the environment: whoever has the admin page
 # shouldn't get to pick a program for the server to run, or open another one to the internet.
 ENV_ONLY = {"ytdlp", "forward_to_port", "cloudflared", "tailscale"}
@@ -128,6 +137,8 @@ ENV_ONLY = {"ytdlp", "forward_to_port", "cloudflared", "tailscale"}
 FOLDERS = ("media_dir", "save_dir", "downloads_dir", "recordings_dir")
 # Settings that are one of a few values: value -> label.
 CHOICES = {"new_rooms": {"accounts": "Account holders", "anyone": "Anyone"},
+           "oidc_default_role": {"host": "Host", "none": "No access"},
+           "oidc_only": {"off": "Off", "on": "On"},
            "who_saves": {"admins": "Admins", "hosts": "Hosts too"},
            "song_lookup": {"musicbrainz": "MusicBrainz", "off": "Off"},
            "ddns_provider": {"off": "Off", "duckdns": "DuckDNS", "noip": "No-IP", "dynu": "Dynu",
@@ -423,6 +434,8 @@ class Settings:
             return None
         if user["disabled"]:
             raise Error("This account is turned off. Ask an admin to turn it back on.", 403)
+        if user["role"] not in ROLES:
+            raise Error("Your sign-in doesn't give you host access. Ask an admin.", 403)
         return self.store.start_staff_session(user["id"], device)
 
     def whoami(self, token: Optional[str]) -> Optional[dict]:
@@ -432,7 +445,7 @@ class Settings:
         if found["user_id"] is None:
             return {"id": None, "name": "admin", "role": "admin", "session": found["session"]}
         user = self.store.user(found["user_id"])
-        if user is None or user["disabled"]:
+        if user is None or user["disabled"] or user["role"] not in ROLES:
             return None
         return {"id": user["id"], "name": user["name"], "role": user["role"], "session": found["session"]}
 
@@ -444,6 +457,8 @@ class Settings:
         user = self.store.user(found["user_id"]) if found["user_id"] is not None else None
         if user is not None and user["disabled"]:  # (deleted meanwhile: the link went with it, use_invite says so)
             raise Error("This account is turned off. Ask an admin to turn it back on.", 403)
+        if user is not None and user["role"] not in ROLES:
+            raise Error("Your sign-in doesn't give you host access. Ask an admin.", 403)
         user_id = self.store.use_invite(token, hash_password(password), name)
         return self.store.start_staff_session(user_id, device)
 

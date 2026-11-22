@@ -22,6 +22,7 @@
   <div id="gate" class="panel" hidden>
     <h1 id="gate-title">Admin</h1>
     <p class="lede" id="gate-text"></p>
+    <div id="sso" hidden></div>
     <form class="sign-in" id="sign-in">
       <label for="account" id="account-label">Name <span class="muted">(leave empty for the admin password)</span></label>
       <input id="account" autocomplete="username" spellcheck="false">
@@ -162,16 +163,20 @@
     $("page").hidden = true;
     $("sign-out").hidden = true;
     $("gate").hidden = false;
+    $("sso").hidden = true;
     if (invite) return inviteGate();
     const status = await call("GET", "/status");
-    const choosing = !!setup && status.setup;
+    const choosing = !!setup && status.setup && !status.oidc?.only;
+    $("sso").hidden = !status.oidc || choosing;
+    if (status.oidc) $("sso").replaceChildren(h("button", { type: "button", onclick: () => location.assign("/auth/oidc/start?target=admin") }, status.oidc.name));
     $("gate-title").textContent = choosing ? "Pick an admin password" : "Admin";
     $("gate-text").textContent = choosing
       ? "This sets the password for the admin page. The setup link stops working once you've used it."
+      : status.oidc?.only ? "Use SSO to sign in to this server."
       : status.setup
         ? "There's no admin password yet. Open the setup link in admin-setup-link.txt, next to the server's database, or set KARAQUEUE_ADMIN_PASSWORD."
         : "Sign in to change how this server works.";
-    $("sign-in").hidden = status.setup && !choosing;
+    $("sign-in").hidden = !!status.oidc?.only || (status.setup && !choosing);
     $("account").hidden = $("account-label").hidden = choosing;
     $("password2").hidden = !choosing;
     $("password2").required = choosing;
@@ -877,7 +882,11 @@
     });
     if (button.dataset.adminView === "library") { loadLibrary(); loadSongs(); }
   });
-  act(async () => (keys.get("admin") ? load() : gate()))();
+  act(async () => {
+    const arrived = await receiveOIDC().catch((err) => { flash(err.message); return false; });
+    if (arrived && !keys.get("admin")) flash("You're signed in as a host. Start a room from the home page.");
+    return keys.get("admin") ? load() : gate();
+  })();
 </script>
 </body>
 </html>
