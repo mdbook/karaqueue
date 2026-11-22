@@ -55,6 +55,7 @@ body {
 }
 
 main { max-width: 40rem; margin: 0 auto; padding: 1.25rem 1rem 4rem; }
+@media (max-width: 520px) { :root { --pad: 16px; } main { padding-inline: .75rem; } } /* phones: less margin around the cards and inside them */
 
 h1, h2, h3, .display {
   font-family: var(--display);

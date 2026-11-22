@@ -21,7 +21,7 @@ from fastapi import WebSocket
 from .store import Error, Store
 
 LAYOUTS = ("split", "video", "queue", "splash", "confidence")
-ACTIONS = ("play", "pause", "restart", "identify", "fullscreen", "speakers")
+ACTIONS = ("play", "pause", "restart", "seek", "identify", "fullscreen", "speakers")
 # Can the screen pick its speakers: no (browser or plain http), not yet (needs a tap), yes.
 AUDIO = ("unsupported", "locked", "ready")
 STATES = ("idle", "playing", "paused", "buffering", "ended", "error")
@@ -353,16 +353,18 @@ class Hub:
     def list(self, code: str) -> list:
         return [_public(display_id, d) for display_id, d in self.displays.get(code.upper(), {}).items()]
 
-    async def command(self, code: str, display_id: str, changes: dict, action: Optional[str]) -> dict:
+    async def command(self, code: str, display_id: str, changes: dict, action: Optional[str], at: Optional[float] = None) -> dict:
         display = self.displays.get(code.upper(), {}).get(display_id)
         if display is None:
             raise Error("That screen isn't connected anymore", 404)
         if action is not None and action not in ACTIONS:
             raise Error("Unknown action. Pick one of: " + ", ".join(ACTIONS))
+        if action == "seek" and (at is None or not 0 <= at < 86400):
+            raise Error("Seek needs a time in seconds")
         display["settings"] = settings(changes, display["settings"])
         if changes.get("record") is not None:
             self.store.screen_record(code, display_id, display["settings"]["record"])
-        await display["ws"].send_json({"type": "command", "settings": display["settings"], "action": action})
+        await display["ws"].send_json({"type": "command", "settings": display["settings"], "action": action, "time": at})
         await self.send(code, {"type": "displays"})
         return _public(display_id, display)
 

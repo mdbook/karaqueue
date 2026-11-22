@@ -52,7 +52,7 @@ main { max-width: 1080px; padding: 0 2.5rem 5rem; }
 #page > section { margin-top: 0; }.rooms li { padding-block: 1.25rem; }.rooms .code { font-size: 1.15rem; }.rooms .grow div { margin-bottom: .25rem; }
 body:not([data-admin-view="settings"]) .admin-settings, body:not([data-admin-view="rooms"]) .admin-rooms, body:not([data-admin-view="library"]) .admin-library, body:not([data-admin-view="server"]) .admin-server, body:not([data-admin-view="access"]) .admin-access { display: none; }
 @media (min-width: 700px) { .item { grid-template-columns: minmax(0,1fr) minmax(0,1fr); } }
-@media (max-width: 600px) { main { padding-inline: 1rem; }.bar { margin-bottom: 2rem; gap: .5rem; }.bar .wordmark { font-size: 1.1rem; }.admin-bar-tools { gap: .25rem; }.theme-picker svg { display: none; }#gate { margin-top: 2rem; padding: 1.5rem; }.item { grid-template-columns: 1fr; gap: .75rem; }.rooms li { flex-wrap: wrap; gap: .5rem; }.rooms .grow { flex-basis: 60%; }.rooms .danger { margin-left: auto; }.admin-tabs { gap: 1.5rem; } }
+@media (max-width: 600px) { main { padding-inline: .75rem; }.bar { margin-bottom: 2rem; gap: .5rem; }.bar .wordmark { font-size: 1.1rem; }.admin-bar-tools { gap: .25rem; }.theme-picker svg { display: none; }#gate { margin-top: 1.5rem; padding: 1.25rem 1rem; }.item { grid-template-columns: 1fr; gap: .75rem; }.rooms li { flex-wrap: wrap; gap: .5rem; }.rooms .grow { flex-basis: 60%; }.rooms .danger { margin-left: auto; }.admin-tabs { gap: 1.5rem; } }
 
 @media (max-width: 400px) {
   .bar { flex-wrap: wrap; padding-block: 1rem; row-gap: .75rem; }

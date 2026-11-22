@@ -117,7 +117,7 @@ CREATE TABLE IF NOT EXISTS screens (
 """
 # What a room allows guests to do, unless the host changes it.
 # `sound` is the id of the one screen the music, mic and recording happen on; "" means each screen plays its own.
-ROOM_OPTIONS = {"songs_per_singer": None, "youtube": True, "library": True, "sound": ""}
+ROOM_OPTIONS = {"songs_per_singer": None, "youtube": True, "library": True, "sound": "", "gap": 0}  # gap: seconds the screens wait between songs
 
 DEVICES = 5  # phones one singer can be signed in on at once; the oldest is signed out past that
 GUEST_SESSIONS = 10  # the same, for a guest account
@@ -431,6 +431,9 @@ class Store:
                     if value is not None and (not isinstance(value, int) or isinstance(value, bool)
                                               or not 1 <= value <= 1000):
                         raise Error("Songs per guest must be between 1 and 1000")
+                elif key == "gap":
+                    if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value <= 60:
+                        raise Error("The pause between songs must be 0 to 60 seconds")
                 elif key == "sound":
                     if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9-]{8,40}|", value):
                         raise Error("Sound must come from one of the room's screens")

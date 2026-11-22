@@ -192,6 +192,11 @@ def test_screens_show_up_for_the_host_and_take_commands():
                 pass
             return message
 
+        # Jumping to a spot in the song: needs a time, and the screen gets it.
+        assert client.patch(url, headers=host, json={"action": "seek"}).status_code == 400
+        assert client.patch(url, headers=host, json={"action": "seek", "time": 42.5}).status_code == 200
+        assert command()["time"] == 42.5
+
         # Effects and up to four mics, each with its own level and balance.
         assert client.patch(url, headers=host, json={"voice": "demon"}).status_code == 400
         res = client.patch(url, headers=host, json={"voice": "chipmunk", "echo": 250})
@@ -619,3 +624,14 @@ def test_song_key_is_clamped_to_an_octave():
     assert displays.settings({"key": 40})["key"] == 12
     assert displays.settings({"key": -40})["key"] == -12
     assert displays.settings({"key": "3"})["key"] == 3
+
+
+def test_pause_between_songs_is_a_room_option():
+    client = TestClient(create_app(Store()))
+    room = client.post("/api/rooms", json={"name": "Friday"}).json()
+    host, url = bearer(room["host_token"]), f"/api/rooms/{room['code']}"
+    assert client.get(url).json()["options"]["gap"] == 0
+    assert client.put(url + "/options", headers=host, json={"gap": 8}).status_code == 200
+    assert client.get(url).json()["options"]["gap"] == 8
+    assert client.put(url + "/options", headers=host, json={"gap": 99}).status_code == 400
+    assert client.put(url + "/options", headers=host, json={"gap": -1}).status_code == 400

@@ -28,7 +28,7 @@ The host page (`/r/<code>/host`) is the control booth:
 - **The queue.** Next song, pause requests (guests can still look, they just can't add), and the whole rotation. Move singers earlier or later, skip someone for now (they keep their spot and songs, and come back when you put them back in), or remove them, their songs and their recordings.
 - **Add a song for someone.** Search the library or YouTube for a guest and add it to their list, or add a guest by hand for someone without a phone. The host isn't held to the song limit.
 - **Screens & sound.** Every TV, what it shows, where the sound comes from, the mic and recording. See [Screens](screens.md).
-- **Room settings.** How many songs each guest can queue, and whether guests can use YouTube, the song library, or both.
+- **Room settings.** How many songs each guest can queue, whether guests can use YouTube, the song library, or both, and a pause between songs (0 to 60 seconds): when a song ends, the screens count down "Name is up in 5" before the next song starts. Pressing Next skips the countdown.
 - **Recordings.** Everyone's takes, when recording is on.
 - **Invite co-host.** Shows a QR code (and a copy link) that signs another device in as host, for when you want to run the room from your phone as well, or sing too. Anyone who scans it is a host, so only show it to people you trust.
 

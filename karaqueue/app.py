@@ -103,6 +103,7 @@ class DisplayIn(BaseModel):
     mics: Optional[list] = None
     record: Optional[bool] = None
     action: Optional[str] = None
+    time: Optional[float] = None  # with action "seek": where to jump to, in seconds
 
 
 class OptionsIn(BaseModel):
@@ -110,6 +111,7 @@ class OptionsIn(BaseModel):
     youtube: Optional[bool] = None
     library: Optional[bool] = None
     sound: Optional[str] = None
+    gap: Optional[int] = None
 
 
 class SaveIn(BaseModel):
@@ -779,7 +781,7 @@ def create_app(store: Optional[Store] = None) -> FastAPI:
     @app.patch("/api/rooms/{code}/displays/{display_id}")
     async def control_display(code: str, display_id: str, body: DisplayIn, tok: Optional[str] = Depends(token)):
         store.require_host(code, tok)
-        return await hub.command(code, display_id, body.model_dump(exclude={"action"}), body.action)
+        return await hub.command(code, display_id, body.model_dump(exclude={"action", "time"}), body.action, body.time)
 
     @app.delete("/api/rooms/{code}/displays/{display_id}")
     async def forget_display(code: str, display_id: str, tok: Optional[str] = Depends(token)):

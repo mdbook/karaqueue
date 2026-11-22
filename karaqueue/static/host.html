@@ -99,6 +99,16 @@
       <section class="view-settings" aria-labelledby="rules-heading">
         <div class="section-head"><h2 id="rules-heading">Room rules</h2></div>
         <div class="card rules">
+          <div class="setting" role="group" aria-labelledby="rule-gap">
+            <span class="setting-label" id="rule-gap">Pause between songs</span>
+            <div class="setting-body">
+              <div class="setting-line">
+                <input id="gap" class="limit" type="number" min="0" max="60" inputmode="numeric" aria-labelledby="rule-gap">
+                <span class="muted small">seconds</span>
+              </div>
+              <p class="setting-note" id="gap-note">The screens count down before the next singer's song starts. 0 goes straight on.</p>
+            </div>
+          </div>
           <div class="setting" role="group" aria-labelledby="rule-limit">
             <span class="setting-label" id="rule-limit">Songs per guest</span>
             <div class="setting-body">
@@ -289,6 +299,7 @@
   function renderRules() {
     const o = state.options;
     if (document.activeElement !== $("limit")) $("limit").value = o.limit;
+    if (document.activeElement !== $("gap")) $("gap").value = o.gap || 0;
     $("limit-reset").hidden = o.songs_per_singer == null;
     $("limit-note").textContent = o.songs_per_singer == null ? "The server's limit." : "Just for this room.";
     const choice = (id, key) => show(id, [["On", true], ["Off", false]].map(([label, value]) =>
@@ -583,6 +594,14 @@
     const restartBtn = h("button", { class: "ghost icon", type: "button", "aria-label": "Restart the song", title: "Restart the song",
       onclick: () => patch(transportTo(), { action: "restart" }) }, icon("restart"));
     const time = h("span", { class: "tv-time grow" });
+    // Drag to jump to a spot in the song on that screen; it lands when you let go.
+    const scrub = h("input", { type: "range", min: 0, max: 1000, step: 1, class: "scrub", "aria-label": "Position in the song on " + d.name });
+    scrub.addEventListener("input", () => { t.scrubbing = true; });
+    scrub.addEventListener("change", act(async () => {
+      t.scrubbing = false;
+      const dur = t.d.duration;
+      if (dur > 0) await patch(id, { action: "seek", time: (Number(scrub.value) / 1000) * dur });
+    }));
     playBtn.onclick = () => {
       const playing = t.d.state === "playing" || t.d.state === "buffering";
       t.d = { ...t.d, state: playing ? "paused" : "playing" };
@@ -819,7 +838,7 @@
         h("div", { class: "tile-title" }, nameEl, h("div", { class: "tile-status" }, stateChip, recMark)),
         h("div", { class: "tile-actions" }, identifyBtn, fullBtn, renameBtn, removeBtn)),
       h("div", { class: "tile-group" },
-        setting(id, "playback", "Playback", h("div", { class: "row transport grow" }, playBtn, restartBtn, time)),
+        setting(id, "playback", "Playback", h("div", { class: "grow" }, h("div", { class: "row transport grow" }, playBtn, restartBtn, time), scrub)),
         setting(id, "layout", "Layout", h("div", { class: "segmented layouts grow", role: "group", "aria-label": "Layout" }, layoutButtons))),
       soundGroup,
       micGroup,
@@ -938,6 +957,8 @@
       const known = now != null && s.duration > 0;
       progress.hidden = !known || s.state === "idle" || s.state === "error";
       if (known) bar.style.transform = "scaleX(" + (now / s.duration).toFixed(4) + ")";
+      scrub.hidden = !known || s.state === "idle" || s.state === "error";
+      if (known && !t.scrubbing) scrub.value = Math.round(now / s.duration * 1000);
       time.textContent = s.state === "error" ? s.reason || "This song can't play on this screen. Press Next."
         : known ? clock(now) + " of " + clock(s.duration) : s.state === "idle" ? "Nothing playing on this screen" : "";
       time.classList.toggle("is-error", s.state === "error");
@@ -1062,6 +1083,11 @@
     const n = Number($("limit").value);
     if (!Number.isInteger(n) || n < 1) { $("limit").value = state.options.limit; throw new Error("Pick a whole number from 1 up"); }
     await api("PUT", base + "/options", { songs_per_singer: n });
+  });
+  $("gap").onchange = act(async () => {
+    const n = Number($("gap").value);
+    if (!Number.isInteger(n) || n < 0 || n > 60) { $("gap").value = state.options.gap || 0; throw new Error("Pick a whole number of seconds, 0 to 60"); }
+    await api("PUT", base + "/options", { gap: n });
   });
   $("limit-reset").onclick = act(() => api("PUT", base + "/options", { songs_per_singer: null }));
   $("open-window").onclick = openScreenWindow;

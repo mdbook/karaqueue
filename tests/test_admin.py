@@ -369,7 +369,7 @@ def test_hosts_set_what_their_room_allows():
     assert client.put(f"/api/rooms/{code}/options", headers=host,
                       json={"youtube": False, "songs_per_singer": 2}).status_code == 200
     assert client.get(f"/api/rooms/{code}").json()["options"] == {
-        "songs_per_singer": 2, "youtube": False, "library": True, "limit": 2}
+        "songs_per_singer": 2, "youtube": False, "library": True, "gap": 0, "limit": 2}
 
     yt = {"title": "Africa", "artist": "Toto", "video": "https://youtu.be/FTQbiNvZqaY"}
     assert client.post(f"/api/rooms/{code}/songs", headers=alex, json=yt).status_code == 403

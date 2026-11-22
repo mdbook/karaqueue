@@ -36,6 +36,8 @@
 </main>
 
 <div id="stuck" role="status" hidden></div>
+<div id="bar" aria-hidden="true"><span></span></div>
+<div id="gap" role="status" aria-live="polite" hidden></div>
 <section id="gone" role="alert" hidden><h1>This room has ended</h1><p>There's no room <span id="gone-code"></span> anymore. Start a new room, then open its screen.</p></section>
 <div id="badge" aria-hidden="true"></div>
 <div id="ident" aria-live="assertive"></div>
@@ -179,6 +181,7 @@
       case "play": if (ready) deck.play(); break;
       case "pause": if (ready) deck.pause(); break;
       case "restart": if (ready) { deck.restart(); doneSong = null; syncRecording(); } break;
+      case "seek": if (ready && Number.isFinite(msg.time)) deck.seek(msg.time); break;
       case "identify": identify(); break;
       case "fullscreen": goFullscreen().catch(() => showStart("fullscreen")); break;
       // Hidden inside the host page there's nothing to tap; the host page's own click counts.
@@ -723,10 +726,34 @@
   const finished = act(async () => {
     if (rec) { doneSong = rec.song; stopRecording(true); }
     if (loadedSong === null) return;
+    const ended = loadedSong;
+    await breather(ended);
+    if (loadedSong !== ended) return; // the host moved on while it counted down
     const me = keys.get(code);
     if (me && me.role === "host") await api("POST", "/rooms/" + code + "/next", { after: loadedSong });
     else send({ type: "ended", song: loadedSong });
   });
+
+  // The host's pause between songs: a countdown over the picture before the show moves on. If the
+  // show moves on without this screen in the meantime (the host pressed Next), the countdown ends.
+  async function breather(song) {
+    const gap = (state && state.options && state.options.gap) || 0;
+    const up = state && state.up_next;
+    const el = $("gap");
+    for (let left = gap; left > 0 && loadedSong === song; left--) {
+      el.textContent = (up ? up.singer + " is up in " : "Next song in ") + left;
+      el.hidden = false;
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    el.hidden = true;
+  }
+
+  // A thin line along the bottom edge showing how far into the song it is.
+  setInterval(() => {
+    const d = playing() ? deck.duration() : null;
+    $("bar").classList.toggle("on", !!d);
+    if (d) $("bar").firstElementChild.style.transform = "scaleX(" + Math.min(1, deck.time() / d).toFixed(4) + ")";
+  }, 250);
 
   // The lower third on the video layout steps aside mid-song so it never sits on the lyrics,
   // then comes back near the end so the next singer knows to get ready.
