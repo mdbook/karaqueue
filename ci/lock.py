@@ -52,7 +52,7 @@ def resolve():
     project = tomllib.loads((ROOT / "pyproject.toml").read_text())
     # setuptools is locked too: install the local app without build isolation or dependencies.
     # The oidc extra is locked too, so the image can do SSO.
-    requirements = (project["project"]["dependencies"] + project["project"]["optional-dependencies"]["oidc"]
+    requirements = (project["project"]["dependencies"] + project["project"].get("optional-dependencies", {}).get("oidc", [])
                     + ["yt-dlp[default,deno]", "setuptools>=68"])
     with tempfile.TemporaryDirectory(dir=ROOT) as directory:
         pip = [sys.executable, "-m", "pip", "download", "--only-binary=:all:", "--no-cache-dir"]

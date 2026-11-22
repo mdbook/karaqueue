@@ -49,12 +49,14 @@ def test_lock_rejects_empty_resolution_and_duplicate_packages(tmp_path):
         lock.check(entry * 2)
 
 
-def test_resolver_uses_current_project_requirements_and_binary_wheels(tmp_path, monkeypatch):
+@pytest.mark.parametrize("extra", [[], ["PyJWT[crypto]>=2.10"]])
+def test_resolver_uses_current_project_requirements_and_binary_wheels(extra, tmp_path, monkeypatch):
     pytest.importorskip("tomllib")
     lock = helper("lock")
     monkeypatch.setattr(lock, "ROOT", tmp_path)
     monkeypatch.setattr(lock, "LOCK", tmp_path / "requirements.lock")
-    (tmp_path / "pyproject.toml").write_text('[project]\ndependencies = ["fastapi>=0.110"]\n')
+    optional = f"[project.optional-dependencies]\noidc = {json.dumps(extra)}\n" if extra else ""
+    (tmp_path / "pyproject.toml").write_text('[project]\ndependencies = ["fastapi>=0.110"]\n' + optional)
     calls = []
 
     def download(command, **kwargs):
@@ -73,7 +75,7 @@ def test_resolver_uses_current_project_requirements_and_binary_wheels(tmp_path, 
     assert "--only-binary=:all:" in command
     assert command[command.index("--uploaded-prior-to") + 1] == "2026-01-01T00:00:00Z"
     assert command[command.index("--find-links") + 1] == newest[0][newest[0].index("--dest") + 1]
-    assert command[-3:] == ["fastapi>=0.110", "yt-dlp[default,deno]", "setuptools>=68"]
+    assert command[-3 - len(extra):] == ["fastapi>=0.110", *extra, "yt-dlp[default,deno]", "setuptools>=68"]
     assert options == {"check": True, "timeout": 240} == newest[1]
     lock.check(lock.LOCK.read_text())
     assert "fastapi==9.9" in lock.LOCK.read_text()
