@@ -145,7 +145,7 @@
     showPairing(null);
     uploadKey = msg.upload || null;
     if (msg.settings) display.record = !!msg.settings.record;
-    onSound(msg);
+    onSound({ display: msg.sound, leader: msg.leader });
     syncRecording();
   }
 
@@ -181,12 +181,13 @@
       case "play": if (ready) deck.play(); break;
       case "pause": if (ready) deck.pause(); break;
       case "restart": if (ready) { deck.restart(); doneSong = null; syncRecording(); } break;
-      case "seek": if (ready && Number.isFinite(msg.time)) deck.seek(msg.time); break;
+      case "seek": if (ready && Number.isFinite(msg.time)) { lastSeek = performance.now(); deck.seek(msg.time); } break;
       case "identify": identify(); break;
       case "fullscreen": goFullscreen().catch(() => showStart("fullscreen")); break;
       // Hidden inside the host page there's nothing to tap; the host page's own click counts.
       case "speakers": if (panel) unlockSpeakers(); else showStart("speakers"); break;
     }
+    sendClock();
   }
 
   // ---- Which speakers this screen plays through. Browsers only let a page pick an output
@@ -620,27 +621,27 @@
     if (deck) deck.audio(display.volume, !interacted || display.muted || following());
   }
 
-  // ---- One place for the sound. When the host picks a screen (or the host panel) for it, every
-  // other screen goes quiet, drops its mic, and keeps its picture in step with that one's music.
+  // ---- One clock for the show, even when every screen plays its own sound. The server picks
+  // the leader. Sound from only decides which screens go quiet and drop their mics.
   // If the sound screen goes away, the others start playing their own sound again. ----
   const SILENT_AFTER_MS = 6000;
-  let leaderClock = null, soundSince = performance.now(), lastSeek = 0, wasFollowing = false;
-  // The server says which screen it is over the socket, once this screen is let in.
-  let soundId = "";
+  let soundSince = performance.now(), lastSeek = 0, wasFollowing = false;
+  // The server tells admitted screens both the sound source and the playback leader.
+  let soundId = "", leaderId = "";
   const soundFrom = () => soundId;
   function onSound(msg) {
+    if (typeof msg.leader === "string") leaderId = msg.leader;
     const next = typeof msg.display === "string" ? msg.display : soundId;
     if (next === soundId) return;
     soundId = next;
     soundSince = performance.now();
     checkFollowing();
   }
-  const leading = () => soundFrom() === displayId;
+  const leading = () => leaderId === displayId;
   function following() {
     const from = soundFrom();
     if (!from || from === displayId) return false;
-    const heard = Math.max(soundSince, leaderClock && leaderClock.display === from ? leaderClock.at : 0);
-    return performance.now() - heard < SILENT_AFTER_MS;
+    return performance.now() - soundSince < SILENT_AFTER_MS;
   }
   function checkFollowing() {
     if (following() === wasFollowing) return;
@@ -651,16 +652,17 @@
   setInterval(checkFollowing, 1000);
 
   function sendClock() {
-    if (!leading()) return;
+    if (!leading() && soundFrom() !== displayId) return;
     const active = deck && body.classList.contains("has-video") && !(deck === youtube && !player);
     send({ type: "clock", song: loadedSong, state: active ? deck.state() : "idle", time: active ? deck.time() : null });
   }
   setInterval(sendClock, 1000);
 
   function onClock(msg) {
-    if (msg.display !== soundFrom()) return;
-    leaderClock = { ...msg, at: performance.now() };
+    // Sound can come from a Queue or Join screen without a playback clock of its own.
+    if (msg.display === soundFrom()) soundSince = performance.now();
     checkFollowing();
+    if (msg.display !== leaderId) return;
     const np = state && state.now_playing;
     if (!deck || !np || msg.song !== np.id || loadedSong !== np.id || !body.classList.contains("has-video")
         || (deck === youtube && !player)) return;
@@ -668,10 +670,11 @@
     if (msg.state === "playing" && mine === "paused") deck.play();
     else if (msg.state === "paused" && mine === "playing") deck.pause();
     // Nudge only when it's clearly off, and give a seek time to land before judging again.
-    if (msg.state === "playing" && msg.time != null && mine === "playing" && performance.now() - lastSeek > 3000
+    if (["playing", "paused"].includes(msg.state) && msg.time != null && ["playing", "paused"].includes(mine)
+        && performance.now() - lastSeek > 3000
         && Math.abs(deck.time() - msg.time) > 0.35) {
       lastSeek = performance.now();
-      deck.seek(msg.time + 0.1);
+      deck.seek(msg.time + (msg.state === "playing" ? 0.1 : 0));
     }
   }
 
@@ -989,7 +992,7 @@
         // The host took this screen out: forget its key and ask to be let in again.
         localStorage.removeItem(screenKey);
         uploadKey = null;
-        onSound({ display: "" });
+        onSound({ display: "", leader: "" });
         syncRecording();
         flash("The host removed this screen.");
         hello();

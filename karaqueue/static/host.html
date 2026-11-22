@@ -589,12 +589,12 @@
     const recMark = h("span", { class: "rec-mark", hidden: true }, "Recording");
 
     const playBtn = h("button", { class: "ghost icon", type: "button" });
-    // With one sound source, play, pause and restart go to it; the other screens follow along.
+    // Transport moves the whole show; prefer the sound source's status for its controls.
     const transportTo = () => tiles.has(soundFrom()) ? soundFrom() : id;
     const restartBtn = h("button", { class: "ghost icon", type: "button", "aria-label": "Restart the song", title: "Restart the song",
       onclick: () => patch(transportTo(), { action: "restart" }) }, icon("restart"));
     const time = h("span", { class: "tv-time grow" });
-    // Drag to jump to a spot in the song on that screen; it lands when you let go.
+    // Drag any screen's slider to jump the whole show; it lands when you let go.
     const scrub = h("input", { type: "range", min: 0, max: 1000, step: 1, class: "scrub", "aria-label": "Position in the song on " + d.name });
     scrub.addEventListener("input", () => { t.scrubbing = true; });
     scrub.addEventListener("change", act(async () => {

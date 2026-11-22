@@ -179,6 +179,7 @@ def test_screens_show_up_for_the_host_and_take_commands():
         assert client.patch(url, headers=host, json={"sink": "y" * 201}).status_code == 400
 
         assert client.patch(url, headers=host, json={"sink": "hdmi-1"}).json()["sink"] == "hdmi-1"
+        assert tv.receive_json() == {"type": "sound", "display": "", "leader": ""}  # Queue has no player
         assert tv.receive_json() == {"type": "displays"}  # from the pause PATCH
         assert tv.receive_json()["settings"]["sink"] == "hdmi-1"
 
@@ -253,7 +254,7 @@ def test_sound_from_one_screen_and_the_others_follow_its_clock(one_loop):
         # Switching the sound tells the screens; nobody else.
         assert client.put(options, headers=host, json={"sound": "tv-1234abcd"}).status_code == 200
         assert tv.receive_json() == {"type": "displays"}  # from its own status
-        assert tv.receive_json() == {"type": "sound", "display": "tv-1234abcd"}
+        assert tv.receive_json() == {"type": "sound", "display": "tv-1234abcd", "leader": "tv-1234abcd"}
         assert phone.receive_json() == {"type": "update"}
 
 

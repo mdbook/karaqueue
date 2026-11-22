@@ -18,7 +18,7 @@ from typing import Callable, Dict, Optional, Set
 
 from fastapi import WebSocket
 
-from .store import Error, Store
+from .store import Error, NoRoom, Store
 
 LAYOUTS = ("split", "video", "queue", "splash", "confidence")
 ACTIONS = ("play", "pause", "restart", "seek", "identify", "fullscreen", "speakers")
@@ -162,10 +162,13 @@ class Hub:
         code = code.upper()
         self.rooms.get(code, set()).discard(ws)
         room = self.displays.get(code, {})
+        leader = self.leader(code)
         for display_id, display in list(room.items()):
             if display["ws"] is ws:
                 del room[display_id]
                 await self.send(code, {"type": "displays"})
+        if leader != self.leader(code):
+            await self.send_sound(code)
         if self._unwait(code, ws):
             await self.send(code, {"type": "waiting"})
 
@@ -220,6 +223,7 @@ class Hub:
 
     async def _admit(self, code: str, ws: WebSocket, display_id: str, info: dict, key: Optional[str] = None) -> None:
         room = self.displays.setdefault(code, {})
+        leader = self.leader(code)
         if display_id not in room and len(room) >= MAX_DISPLAYS:
             await ws.send_json({"type": "error", "detail": "This room has too many screens connected."})
             return
@@ -240,10 +244,13 @@ class Hub:
         # A "panel" is the host page itself playing the sound, with no picture of its own.
         room[display_id] = {"ws": ws, "settings": saved, "status": {"state": "idle", "mic_state": "unsupported", "recording": False, "reason": ""},
                             "audio": "unsupported", "picker": False, "outputs": [], "inputs": [], "upload": upload, "panel": info.get("panel") is True}
-        welcome = {"type": "welcome", "upload": upload, "settings": saved, "sound": self.store.sound(code)}
+        welcome = {"type": "welcome", "upload": upload, "settings": saved,
+                   "sound": self.store.sound(code), "leader": self.leader(code)}
         if key:
             welcome["key"] = key  # the screen keeps it, to come back without asking again
         await ws.send_json(welcome)
+        if leader != self.leader(code):
+            await self.send_sound(code, skip=ws)
         await self.send(code, {"type": "displays"})
 
     def waiting_list(self, code: str) -> list:
@@ -267,15 +274,33 @@ class Hub:
         """The host removes a screen: its key stops working and it has to ask again."""
         code = code.upper()
         self.store.forget_screen(code, display_id)
+        leader = self.leader(code)
         display = self.displays.get(code, {}).pop(display_id, None)
         if display:
             await _try_send(display["ws"], {"type": "removed"})
         await self.send(code, {"type": "displays"})
+        if leader != self.leader(code):
+            await self.send_sound(code)
 
-    async def send_sound(self, code: str) -> None:
+    def leader(self, code: str) -> str:
+        # Prefer the sound screen; otherwise the first admitted screen with a video layout.
+        # Queue and join-only screens have no player clock to follow.
+        room = self.displays.get(code.upper(), {})
+        eligible = [i for i, d in room.items() if d["settings"]["layout"] in ("split", "video", "confidence")]
+        if not eligible:
+            return ""
+        try:
+            sound = self.store.sound(code)
+        except NoRoom:
+            return ""  # the admin can remove a room while its screens are still connected
+        return sound if sound in eligible else next(iter(eligible), "")
+
+    async def send_sound(self, code: str, skip: Optional[WebSocket] = None) -> None:
         sound = self.store.sound(code)
+        leader = self.leader(code)
         for display in list(self.displays.get(code.upper(), {}).values()):
-            await _try_send(display["ws"], {"type": "sound", "display": sound})
+            if display["ws"] is not skip:
+                await _try_send(display["ws"], {"type": "sound", "display": sound, "leader": leader})
 
     async def receive(self, code: str, ws: WebSocket, message: dict, address: str = "",
                       may_wait: Callable[[], bool] = lambda: True, per_address: int = 4) -> None:
@@ -319,15 +344,19 @@ class Hub:
                 await asyncio.to_thread(self.store.song_ended, code, song)
                 await self.notify(code)
         elif kind == "clock":
-            # The screen the sound comes from says where it is in the song; the other screens
-            # follow it so the picture matches the music. Only screens hear it, and it doesn't
+            # One screen says where it is in the song; all the others follow its clock,
+            # whether or not they play sound. Only screens hear it, and it doesn't
             # count as a status change, so the host page isn't asked to refetch every second.
             sender = next((i for i, d in room.items() if d["ws"] is ws), None)
             song = message.get("song")
             if sender is None or not (song is None or (isinstance(song, int) and not isinstance(song, bool))):
                 return
-            if sender != self.store.sound(code):
-                return  # only the screen the host picked for the sound sets the time
+            try:
+                sound = self.store.sound(code)
+            except NoRoom:
+                return
+            if sender != self.leader(code) and sender != sound:
+                return  # the sound screen also reports liveness, even without a video layout
             state = message.get("state")
             clock = {"type": "clock", "display": sender, "song": song,
                      "state": state if state in STATES else "idle", "time": _seconds(message.get("time"))}
@@ -361,10 +390,19 @@ class Hub:
             raise Error("Unknown action. Pick one of: " + ", ".join(ACTIONS))
         if action == "seek" and (at is None or not 0 <= at < 86400):
             raise Error("Seek needs a time in seconds")
+        leader = self.leader(code)
         display["settings"] = settings(changes, display["settings"])
         if changes.get("record") is not None:
             self.store.screen_record(code, display_id, display["settings"]["record"])
         await display["ws"].send_json({"type": "command", "settings": display["settings"], "action": action, "time": at})
+        # It's one show: transport controls on any tile move every player, including the leader.
+        # Other settings (volume, mic, layout, ...) still belong to just that screen.
+        if action in ("play", "pause", "restart", "seek"):
+            for other in list(self.displays.get(code.upper(), {}).values()):
+                if other is not display:
+                    await _try_send(other["ws"], {"type": "command", "action": action, "time": at})
+        if leader != self.leader(code):
+            await self.send_sound(code)
         await self.send(code, {"type": "displays"})
         return _public(display_id, display)
 
