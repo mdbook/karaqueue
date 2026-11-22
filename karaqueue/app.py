@@ -96,6 +96,7 @@ class DisplayIn(BaseModel):
     sink: Optional[str] = None
     mic: Optional[bool] = None
     mic_volume: Optional[int] = None
+    key: Optional[int] = None
     reverb: Optional[int] = None
     echo: Optional[int] = None
     voice: Optional[str] = None
@@ -662,6 +663,14 @@ def create_app(store: Optional[Store] = None) -> FastAPI:
         link = f"{home}/r/{code.upper()}#claim={claim}"
         return {"claim": claim, "link": link, "minutes": CLAIM_SECONDS // 60,
                 "qr_svg": segno.make(link).svg_inline(border=2, omitsize=True)}
+
+    @app.post("/api/rooms/{code}/host/link")
+    def host_link(code: str, request: Request, tok: Optional[str] = Depends(token)):
+        """A link (and QR code) that signs another device in as host, built on the address guests' phones
+        use, so it works from a phone even when the host page is open at localhost."""
+        store.require_host(code, tok)
+        link = f"{guest_home(request)}/r/{code.upper()}/host#key={tok}"
+        return {"link": link, "qr_svg": segno.make(link).svg_inline(border=2, omitsize=True)}
 
     @app.post("/api/rooms/{code}/claim")
     def claim(code: str, body: ClaimIn):

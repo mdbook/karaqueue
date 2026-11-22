@@ -30,7 +30,7 @@ The host page (`/r/<code>/host`) is the control booth:
 - **Screens & sound.** Every TV, what it shows, where the sound comes from, the mic and recording. See [Screens](screens.md).
 - **Room settings.** How many songs each guest can queue, and whether guests can use YouTube, the song library, or both.
 - **Recordings.** Everyone's takes, when recording is on.
-- **Invite co-host.** Copies a link that signs another device in as host, for when you want to sing too.
+- **Invite co-host.** Shows a QR code (and a copy link) that signs another device in as host, for when you want to run the room from your phone as well, or sing too. Anyone who scans it is a host, so only show it to people you trust.
 
 Next song asks first if someone is still mid-song, so a stray tap doesn't cut off a singer.
 

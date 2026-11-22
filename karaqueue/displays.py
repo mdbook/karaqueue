@@ -27,8 +27,9 @@ AUDIO = ("unsupported", "locked", "ready")
 STATES = ("idle", "playing", "paused", "buffering", "ended", "error")
 MICS = ("unsupported", "off", "on", "blocked")
 VOICES = ("normal", "chipmunk")
+KEY_RANGE = 12  # semitones the song can be moved up or down
 DEFAULTS = {"name": "Screen", "layout": "split", "volume": 100, "muted": False, "sink": "",
-            "mic": False, "mic_volume": 80, "reverb": 25, "echo": 0, "voice": "normal", "mics": [],
+            "mic": False, "mic_volume": 80, "reverb": 25, "echo": 0, "key": 0, "voice": "normal", "mics": [],
             "record": False}
 MAX_DISPLAYS = 12
 MAX_WAITING = 12  # screens waiting for the host at once, per room
@@ -63,6 +64,11 @@ def settings(raw: dict, current: Optional[dict] = None) -> dict:
                 out[key] = max(0, min(100, int(raw[key])))
             except (TypeError, ValueError):
                 raise Error(label + " must be a number from 0 to 100")
+    if raw.get("key") is not None:
+        try:
+            out["key"] = max(-KEY_RANGE, min(KEY_RANGE, int(raw["key"])))
+        except (TypeError, ValueError):
+            raise Error(f"Key must be a whole number from -{KEY_RANGE} to {KEY_RANGE}")
     for key in ("muted", "mic", "record"):
         if raw.get(key) is not None:
             out[key] = bool(raw[key])

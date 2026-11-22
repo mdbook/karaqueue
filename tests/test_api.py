@@ -131,7 +131,7 @@ def test_screens_show_up_for_the_host_and_take_commands():
         assert client.get(f"/api/rooms/{code}/displays", headers=alex).status_code == 403
         [screen] = client.get(f"/api/rooms/{code}/displays", headers=host).json()
         assert screen == {"id": "tv-1234abcd", "name": "Bar TV", "layout": "video", "volume": 100,
-                          "muted": False, "sink": "", "mic": False, "mic_volume": 80, "reverb": 25, "echo": 0, "voice": "normal",
+                          "muted": False, "sink": "", "mic": False, "mic_volume": 80, "reverb": 25, "echo": 0, "key": 0, "voice": "normal",
                           "mics": [], "record": False,
                           "state": "playing", "mic_state": "on", "recording": True, "time": 12.3, "duration": None,
                           "reason": "", "audio": "unsupported", "picker": False, "outputs": [], "inputs": [], "panel": False}
@@ -172,6 +172,7 @@ def test_screens_show_up_for_the_host_and_take_commands():
                                                      "mic": True, "reverb": -5})
         assert res.json()["volume"] == 100 and res.json()["layout"] == "queue"
         assert res.json()["mic"] is True and res.json()["reverb"] == 0
+        assert client.patch(url, headers=host, json={"key": "up"}).status_code == 422
         command = tv.receive_json()
         assert command["type"] == "command" and command["action"] == "pause"
         assert command["settings"]["layout"] == "queue"
@@ -611,3 +612,10 @@ def test_a_leftover_file_that_cant_be_deleted_is_logged_not_raised(tmp_path, cap
     with caplog.at_level("WARNING", logger="karaqueue"):
         quiet_unlink(stuck)  # unlink() on a non-empty directory raises OSError
     assert any("stuck" in m for m in caplog.messages)
+
+
+def test_song_key_is_clamped_to_an_octave():
+    from karaqueue import displays
+    assert displays.settings({"key": 40})["key"] == 12
+    assert displays.settings({"key": -40})["key"] == -12
+    assert displays.settings({"key": "3"})["key"] == 3

@@ -13,14 +13,16 @@ PAGE = """
 async (opts) => {
   const rate = 44100, ctx = new OfflineAudioContext(2, rate * opts.seconds, rate);
   const chain = KQVoice.build(ctx);
+  const key = opts.key ? KQVoice.shifter(ctx, opts.key) : null;
   const osc = ctx.createBufferSource();
   const buffer = ctx.createBuffer(1, rate * opts.seconds, rate);
   const data = buffer.getChannelData(0);
   if (opts.click) data[0] = 1;
   else for (let i = 0; i < data.length; i++) data[i] = 0.3 * Math.sin(2 * Math.PI * 440 * i / rate);
   osc.buffer = buffer;
+  if (key) { osc.connect(key.input); key.output.connect(ctx.destination); }
   const strip = chain.add(osc, 1, 0);
-  strip.set({ volume: 100, pan: opts.pan || 0 });
+  strip.set({ volume: opts.silence_mic ? 0 : 100, pan: opts.pan || 0 });
   chain.set({ volume: 100, reverb: 0, echo: opts.echo || 0, voice: opts.voice || "normal", muted: false });
   chain.mix.connect(ctx.destination);
   osc.start();
@@ -77,3 +79,10 @@ def test_balance_moves_a_mic_to_one_side(render):
     left, right = render(pan=-100), render(pan=100)
     assert left["energyL"] > 20 * left["energyR"]
     assert right["energyR"] > 20 * right["energyL"]
+
+
+@pytest.mark.parametrize("semitones", [12, -12, -5])
+def test_song_key_shifter_moves_the_pitch(render, semitones):
+    # With the mic strip silenced, what's left is the shifter's own output.
+    out = render(key=semitones, silence_mic=True)
+    assert out["hz"] == pytest.approx(440 * 2 ** (semitones / 12), rel=0.06)

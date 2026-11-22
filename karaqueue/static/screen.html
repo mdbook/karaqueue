@@ -98,6 +98,7 @@
     mic_volume: Number.isFinite(saved.mic_volume) ? saved.mic_volume : 80,
     reverb: Number.isFinite(saved.reverb) ? saved.reverb : 25,
     echo: Number.isFinite(saved.echo) ? saved.echo : 0,
+    key: Number.isFinite(saved.key) ? saved.key : 0,
     voice: saved.voice === "chipmunk" ? "chipmunk" : "normal",
     mics: Array.isArray(saved.mics) ? saved.mics.slice(0, 4) : [],
     record: !!saved.record,
@@ -161,6 +162,7 @@
     for (const k of ["mic_volume", "reverb", "echo"]) {
       if (Number.isFinite(s[k])) display[k] = Math.max(0, Math.min(100, Math.round(s[k])));
     }
+    if (Number.isFinite(s.key)) display.key = Math.max(-12, Math.min(12, Math.round(s.key)));
     persist();
     $("badge").textContent = display.name;
     body.dataset.layout = display.layout;
@@ -188,6 +190,7 @@
   // (setSinkId) in a secure context (https or localhost). Chrome only names the outputs once the
   // page has been allowed the microphone; Firefox only names the ones its own picker (selectAudioOutput)
   // was used on, one per pick. Either way the host can ask for that tap. ----
+  let song = null; // the playing song's Web Audio path, once a key change is set (see applyKey)
   const canRoute = "setSinkId" in HTMLMediaElement.prototype && !!navigator.mediaDevices;
   const canPick = canRoute && !!navigator.mediaDevices.selectAudioOutput;
 
@@ -238,24 +241,24 @@
     video.setSinkId(display.sink).catch(() => {
       if (loud) flash("Couldn't switch to that speaker. Still playing through the last one.");
     });
-    if (mic) routeMic();
+    if (mic) routeCtx(mic);
+    if (song) routeCtx(song);
   }
 
-  // Chrome moves the mic's whole AudioContext to the speaker. Firefox has no AudioContext.setSinkId,
-  // so there the mic goes out through a hidden <audio> element, which can be moved.
-  function routeMic() {
-    const m = mic;
-    if (m.ctx.setSinkId) return void m.ctx.setSinkId(display.sink).catch(() => {});
+  // Chrome moves a whole AudioContext to the speaker. Firefox has no AudioContext.setSinkId, so
+  // there the context's sound (`tail` is its last node) goes out through a hidden <audio> element.
+  function routeCtx(o) {
+    if (o.ctx.setSinkId) return void o.ctx.setSinkId(display.sink).catch(() => {});
     if (!canRoute) return;
-    if (!m.out) {
-      const dest = m.ctx.createMediaStreamDestination();
-      m.chain.mix.disconnect(m.ctx.destination);
-      m.chain.mix.connect(dest);
-      m.out = new Audio();
-      m.out.srcObject = dest.stream;
-      m.out.play().catch(() => {});
+    if (!o.out) {
+      const dest = o.ctx.createMediaStreamDestination();
+      o.tail.disconnect(o.ctx.destination);
+      o.tail.connect(dest);
+      o.out = new Audio();
+      o.out.srcObject = dest.stream;
+      o.out.play().catch(() => {});
     }
-    m.out.setSinkId(display.sink).catch(() => {});
+    o.out.setSinkId(display.sink).catch(() => {});
   }
 
   // ---- The singer's mic through this screen's speakers, with a little reverb. The mic is
@@ -329,9 +332,10 @@
 
   async function startMic(rate) {
     const ctx = new AudioContext(rate ? { latencyHint: "interactive", sampleRate: rate } : { latencyHint: "interactive" });
-    mic = { ctx, chain: KQVoice.build(ctx), streams: new Map(), strips: [], key: "", failed: new Set(), queue: Promise.resolve() };
-    mic.chain.mix.connect(ctx.destination);
-    if (display.sink) routeMic();
+    mic = { ctx, chain: KQVoice.build(ctx), tail: null, streams: new Map(), strips: [], key: "", failed: new Set(), queue: Promise.resolve() };
+    mic.tail = mic.chain.mix;
+    mic.tail.connect(ctx.destination);
+    if (display.sink) routeCtx(mic);
     try {
       await syncMics();
     } catch (e) {
@@ -577,7 +581,37 @@
   video.addEventListener("loadedmetadata", () => body.classList.toggle("audio-only", video.videoWidth === 0));
   if (display.sink) applySink(false);
 
+  // ---- Key change: the playing song (a library file or a downloaded YouTube song) goes through
+  // the same pitch shifter as the chipmunk voice. Made the first time a key is set, so a normal party
+  // never routes the song through Web Audio. A YouTube song still playing from YouTube's own player
+  // can't be moved. The recording keeps the song as it came, since it's taken from the element. ----
+  function applyKey() {
+    if (!song && !display.key) return;
+    if (!song) {
+      const ctx = new AudioContext({ latencyHint: "playback" });
+      const tail = ctx.createGain();
+      tail.connect(ctx.destination);
+      song = { ctx, tail, source: ctx.createMediaElementSource(video), shift: null, key: 0 };
+      song.source.connect(tail);
+      if (display.sink) routeCtx(song);
+    }
+    if (interacted && song.ctx.state === "suspended") song.ctx.resume();
+    if (song.key === display.key) return;
+    song.key = display.key;
+    song.source.disconnect();
+    if (song.shift) song.shift.output.disconnect();
+    song.shift = null;
+    if (song.key) {
+      song.shift = KQVoice.shifter(song.ctx, song.key);
+      song.source.connect(song.shift.input);
+      song.shift.output.connect(song.tail);
+    } else {
+      song.source.connect(song.tail);
+    }
+  }
+
   function applyAudio() {
+    applyKey();
     // Until someone taps the screen, browsers only allow muted autoplay.
     if (deck === youtube && !player) return;
     if (deck) deck.audio(display.volume, !interacted || display.muted || following());

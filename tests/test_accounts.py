@@ -155,3 +155,15 @@ def test_admins_turn_off_reset_and_delete_guest_accounts(monkeypatch):
     assert client.delete(f"/api/admin/guests/{alex['id']}", headers=admin).json()["guests"] == []
     # The singer stays in the room, just without the account.
     assert [s["name"] for s in client.get(f"/api/rooms/{code}").json()["rotation"]] == ["Alex"]
+
+
+def test_host_link_is_host_only_and_carries_the_key():
+    client = TestClient(create_app(Store()))
+    room = client.post("/api/rooms", json={"name": "Friday"}).json()
+    code, key = room["code"], room["host_token"]
+    res = client.post(f"/api/rooms/{code}/host/link", headers=bearer(key))
+    assert res.status_code == 200
+    assert res.json()["link"].endswith(f"/r/{code}/host#key={key}") and res.json()["qr_svg"].startswith("<svg")
+    singer = client.post(f"/api/rooms/{code}/singers", json={"name": "Sam"}).json()
+    assert client.post(f"/api/rooms/{code}/host/link", headers=bearer(singer["token"])).status_code == 403
+    assert client.post(f"/api/rooms/{code}/host/link").status_code in (401, 403)

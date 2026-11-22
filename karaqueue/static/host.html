@@ -18,8 +18,8 @@
     <h1 id="room-name">Host</h1>
     <div class="room"><span class="muted small">Room</span> <span class="code" id="room-code"></span></div>
     <button class="ghost small" id="copy-host" type="button" aria-describedby="host-link-note"
-      title="This link signs whoever opens it in as host. Only share it with co-hosts.">Invite co-host</button>
-    <span class="visually-hidden" id="host-link-note">This link signs whoever opens it in as host. Only share it with co-hosts.</span>
+      title="A QR code that signs another phone in as host. Only share it with co-hosts.">Invite co-host</button>
+    <span class="visually-hidden" id="host-link-note">This QR code and link sign whoever uses them in as host. Only share it with co-hosts.</span>
   </header>
 
   <div class="workspace-title"><div><h2 id="view-title" tabindex="-1">The queue</h2><p id="view-description">A great night, one singer at a time.</p></div><a class="button ghost small" id="guest-view" target="_blank" rel="noopener">Guest view</a></div>
@@ -640,6 +640,13 @@
       onclick: () => { t.d = { ...t.d, reverb: value }; paint(); patch(id, { reverb: value }); } }, label));
     const echoButtons = ECHOES.map(([value, label]) => h("button", { type: "button", "data-echo": value,
       onclick: () => { t.d = { ...t.d, echo: value }; paint(); patch(id, { echo: value }); } }, label));
+    const keyDown = h("button", { type: "button", "aria-label": "Key down a semitone", onclick: () => nudgeKey(-1) }, "-");
+    const keyUp = h("button", { type: "button", "aria-label": "Key up a semitone", onclick: () => nudgeKey(1) }, "+");
+    const keyText = h("button", { type: "button", title: "Back to the original key", onclick: () => nudgeKey(0) });
+    const nudgeKey = (by) => {
+      const key = by ? Math.max(-12, Math.min(12, (t.d.key || 0) + by)) : 0;
+      t.d = { ...t.d, key }; paint(); patch(id, { key });
+    };
     const voiceButtons = VOICES.map(([value, label]) => h("button", { type: "button", "data-voice": value,
       onclick: () => { t.d = { ...t.d, voice: value }; paint(); patch(id, { voice: value }); } }, label));
     const micNote = noteEl();
@@ -797,10 +804,13 @@
       h("div", { class: "segmented grow", role: "group", "aria-label": "Voice" }, voiceButtons));
     const micsSetting = setting(id, "mics", "Microphones", [micList, addMicBtn], micListNote);
     const recSetting = setting(id, "record", "Record", [recBtn, recText], recNote);
+    const keyNote = noteEl();
+    const keySetting = setting(id, "key", "Song key",
+      h("div", { class: "segmented grow", role: "group", "aria-label": "Song key" }, keyDown, keyText, keyUp), keyNote);
     const micGroup = h("div", { class: "tile-group" }, micSetting, micsSetting, reverbSetting, echoSetting, voiceSetting, recSetting);
     const soundGroup = h("div", { class: "tile-group" },
       setting(id, "volume", "Volume", h("div", { class: "row volume-row grow" }, muteBtn, slider, volText)),
-      speakers);
+      keySetting, speakers);
     const elsewhereNote = h("p", { class: "setting-note elsewhere-note", hidden: true });
 
     t.el = h("article", { class: "tv-tile card" + (d.panel ? " panel-tile" : ""), "data-id": id },
@@ -867,6 +877,12 @@
       micSlider.classList.toggle("is-muted", !s.mic);
       micText.textContent = s.mic ? s.mic_volume : "Off";
       for (const b of reverbButtons) b.setAttribute("aria-pressed", String(Number(b.dataset.reverb) === s.reverb));
+      const key = s.key || 0;
+      keyText.textContent = key ? (key > 0 ? "+" : "") + key + " semitones" : "Original key";
+      keyDown.disabled = key <= -12;
+      keyUp.disabled = key >= 12;
+      const np = state && state.now_playing;
+      setNote(keyNote, key && np && np.video_id && !np.media && !np.file ? "This YouTube song is playing from YouTube's own player, so its key can't change." : "");
       for (const b of echoButtons) b.setAttribute("aria-pressed", String(Number(b.dataset.echo) === s.echo));
       for (const b of voiceButtons) b.setAttribute("aria-pressed", String(b.dataset.voice === s.voice));
       paintMicList(s);
@@ -1056,9 +1072,13 @@
     flash("Screen link copied", "ok");
   }));
   $("copy-host").onclick = act(async () => {
-    if (!confirm("Copy a link that makes whoever opens it a host of this room? They can skip songs, remove singers and control the screens. Only send it to someone you trust.")) return;
-    await copyText(location.origin + "/r/" + code + "/host#key=" + keys.get(code).token);
-    flash("Host link copied", "ok");
+    const res = await api("POST", base + "/host/link");
+    const qr = h("div", { class: "move-qr", role: "img", "aria-label": "QR code that signs a phone in as host" });
+    qr.innerHTML = res.qr_svg; // Server-generated QR markup.
+    $("move-heading").textContent = "Invite a co-host";
+    show("move-body", h("p", { class: "muted small" }, "Scan this with the other phone or tablet to sign it in as host. Anyone who scans it can run the room, so only show it to people you trust."), qr,
+      h("button", { type: "button", class: "ghost small", onclick: act(async () => { await copyText(res.link); flash("Host link copied", "ok"); }) }, "Copy link"));
+    $("move-dialog").showModal();
   });
   // Library songs play from the server itself, so they come first, like on the guest page.
   let finding = { library: false, youtube: false }, pickedMedia = null, searches = 0;

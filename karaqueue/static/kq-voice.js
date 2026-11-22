@@ -17,7 +17,7 @@
     return buffer;
   }
 
-  // Real-time pitch up by resampling: two delay lines whose delay shrinks steadily play the
+  // Real-time pitch shift (up or down) by resampling: two delay lines whose delay shrinks steadily play the
   // voice back faster, and crossfade as one wraps around. Pitch and formants (the throat and
   // mouth resonances) move up together, which is exactly the Alvin and the Chipmunks sound.
   function chipmunk(ctx, semitones) {
@@ -26,7 +26,7 @@
     const ramp = ctx.createBuffer(1, size, ctx.sampleRate), fade = ctx.createBuffer(1, size, ctx.sampleRate);
     const delays = ramp.getChannelData(0), gains = fade.getChannelData(0);
     for (let i = 0; i < size; i++) {
-      delays[i] = (rate - 1) * GRAIN * (1 - i / size);
+      delays[i] = (rate - 1) * GRAIN * (1 - i / size) + Math.max(0, 1 - rate) * GRAIN; // going down needs a head start
       gains[i] = Math.pow(Math.sin(Math.PI * i / size), 2); // two taps half a grain apart sum to 1
     }
     const input = ctx.createGain(), output = ctx.createGain(), start = ctx.currentTime + 0.01;
@@ -109,5 +109,5 @@
     return { mix, set, add };
   }
 
-  window.KQVoice = { build, CHIPMUNK_SEMITONES };
+  window.KQVoice = { build, shifter: chipmunk, CHIPMUNK_SEMITONES };
 })();
