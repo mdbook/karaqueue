@@ -233,7 +233,7 @@ class Hub:
         upload = secrets.token_urlsafe(24)
         # A "panel" is the host page itself playing the sound, with no picture of its own.
         room[display_id] = {"ws": ws, "settings": saved, "status": {"state": "idle", "mic_state": "unsupported", "recording": False, "reason": ""},
-                            "audio": "unsupported", "outputs": [], "inputs": [], "upload": upload, "panel": info.get("panel") is True}
+                            "audio": "unsupported", "picker": False, "outputs": [], "inputs": [], "upload": upload, "panel": info.get("panel") is True}
         welcome = {"type": "welcome", "upload": upload, "settings": saved, "sound": self.store.sound(code)}
         if key:
             welcome["key"] = key  # the screen keeps it, to come back without asking again
@@ -286,6 +286,7 @@ class Hub:
                 if display["ws"] is ws:
                     audio = message.get("audio")
                     display["audio"] = audio if audio in AUDIO else "unsupported"
+                    display["picker"] = message.get("picker") is True  # Firefox: one speaker per pick, so offer to pick again
                     display["outputs"] = outputs(message.get("outputs"))
                     display["inputs"] = outputs(message.get("inputs"), "Microphone")
                     await self.send(code, {"type": "displays"})
@@ -362,7 +363,7 @@ class Hub:
 
 def _public(display_id: str, display: dict) -> dict:
     return {"id": display_id, **display["settings"], **display["status"],
-            "audio": display["audio"], "outputs": display["outputs"], "inputs": display["inputs"], "panel": display["panel"]}
+            "audio": display["audio"], "picker": display["picker"], "outputs": display["outputs"], "inputs": display["inputs"], "panel": display["panel"]}
 
 
 async def _try_send(ws: WebSocket, message: dict) -> bool:

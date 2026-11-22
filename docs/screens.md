@@ -29,7 +29,7 @@ Screens move on to the next song by themselves when a video ends, whether they w
 - **Second monitor.** If the host's computer has two monitors, Open on the other monitor puts a screen right on the second one. Press F there to fill it.
 - **Chromecast.** When the host's browser can see a Chromecast or other cast display, a Cast a screen button shows up. The cast page is just another screen and appears in the list like any TV.
 
-These need Chrome or Edge, with the page opened over https or on `localhost`. Over plain http on your network the buttons stay hidden and screens use their default speakers. Putting KaraQueue behind a reverse proxy with a certificate (Caddy does this in a couple of lines) turns them on everywhere; see [Behind a reverse proxy](install.md#behind-a-reverse-proxy).
+Speakers work in Chrome, Edge and Firefox. On Firefox the screen shows its own speaker picker and you choose one speaker at a time (Add speakers adds another). Second monitor and Cast need Chrome or Edge. All of these need the page opened over https or on `localhost`. Over plain http on your network the buttons stay hidden and screens use their default speakers. Putting KaraQueue behind a reverse proxy with a certificate (Caddy does this in a couple of lines) turns them on everywhere; see [Behind a reverse proxy](install.md#behind-a-reverse-proxy).
 
 ## Mic and recordings
 

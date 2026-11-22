@@ -782,7 +782,7 @@
     } });
     const listBtn = h("button", { class: "ghost small", type: "button", onclick: () => {
       patch(id, { action: "speakers" });
-      flash("Tap the screen on " + t.d.name + " and allow the microphone so it can list its speakers", "ok");
+      flash("Tap the screen on " + t.d.name + (t.d.picker ? " and choose the speakers" : " and allow the microphone so it can list its speakers"), "ok");
     } }, "List speakers");
     const speakerNote = noteEl();
     let shownOutputs = "";
@@ -893,7 +893,8 @@
       const outputs = s.outputs || [];
       const ready = s.audio === "ready";
       sinkSelect.hidden = !ready;
-      listBtn.hidden = s.audio !== "locked";
+      listBtn.hidden = s.audio !== "locked" && !s.picker;
+      listBtn.textContent = s.picker ? "Add speakers" : "List speakers";
       sinkSelect.parentElement.hidden = s.audio === "unsupported";
       const key = JSON.stringify(outputs);
       if (ready && key !== shownOutputs && document.activeElement !== sinkSelect) {
@@ -906,7 +907,7 @@
       if (document.activeElement !== sinkSelect) sinkSelect.value = s.sink || "";
       const np = state && state.now_playing;
       setNote(speakerNote, s.audio === "unsupported"
-        ? "Picking speakers needs Chrome or Edge, and the screen opened over https or on localhost. It uses its default speakers."
+        ? "Picking speakers needs Chrome, Edge or Firefox, and the screen opened over https or on localhost. It uses its default speakers."
         : s.audio === "locked" ? "Uses its default speakers until it lists the others."
         : np && np.video_id && !np.media && !np.file ?"YouTube songs always play through the default speakers."
         : "");

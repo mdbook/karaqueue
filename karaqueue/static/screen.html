@@ -185,9 +185,11 @@
   }
 
   // ---- Which speakers this screen plays through. Browsers only let a page pick an output
-  // (setSinkId) in a secure context (https or localhost), and Chrome only names the outputs
-  // once the page has been allowed the microphone, so the host can ask for that tap. ----
+  // (setSinkId) in a secure context (https or localhost). Chrome only names the outputs once the
+  // page has been allowed the microphone; Firefox only names the ones its own picker (selectAudioOutput)
+  // was used on, one per pick. Either way the host can ask for that tap. ----
   const canRoute = "setSinkId" in HTMLMediaElement.prototype && !!navigator.mediaDevices;
+  const canPick = canRoute && !!navigator.mediaDevices.selectAudioOutput;
 
   async function reportOutputs() {
     let outputs = [], audio = "unsupported";
@@ -195,9 +197,9 @@
       const devices = await navigator.mediaDevices.enumerateDevices().catch(() => []);
       outputs = devices.filter((d) => d.kind === "audiooutput" && d.deviceId)
         .map((d) => ({ id: d.deviceId, label: d.label }));
-      audio = outputs.length > 1 ? "ready" : "locked";
+      audio = outputs.some((o) => o.id !== "default") ? "ready" : "locked";
     }
-    send({ type: "outputs", audio, outputs, inputs: await listInputs() });
+    send({ type: "outputs", audio, picker: canPick, outputs, inputs: await listInputs() });
   }
 
   // The microphones this screen can use. The browser adds a "default" and a "communications"
@@ -218,8 +220,12 @@
 
   async function unlockSpeakers() {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stream.getTracks().forEach((t) => t.stop());
+      if (canPick) {
+        await navigator.mediaDevices.selectAudioOutput(); // Firefox: its own picker, then the speaker is listed
+      } else {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((t) => t.stop());
+      }
     } catch {
       flash("No speaker list without that permission. The screen keeps using its default speakers.");
     }
@@ -232,7 +238,24 @@
     video.setSinkId(display.sink).catch(() => {
       if (loud) flash("Couldn't switch to that speaker. Still playing through the last one.");
     });
-    if (mic && mic.ctx.setSinkId) mic.ctx.setSinkId(display.sink).catch(() => {});
+    if (mic) routeMic();
+  }
+
+  // Chrome moves the mic's whole AudioContext to the speaker. Firefox has no AudioContext.setSinkId,
+  // so there the mic goes out through a hidden <audio> element, which can be moved.
+  function routeMic() {
+    const m = mic;
+    if (m.ctx.setSinkId) return void m.ctx.setSinkId(display.sink).catch(() => {});
+    if (!canRoute) return;
+    if (!m.out) {
+      const dest = m.ctx.createMediaStreamDestination();
+      m.chain.mix.disconnect(m.ctx.destination);
+      m.chain.mix.connect(dest);
+      m.out = new Audio();
+      m.out.srcObject = dest.stream;
+      m.out.play().catch(() => {});
+    }
+    m.out.setSinkId(display.sink).catch(() => {});
   }
 
   // ---- The singer's mic through this screen's speakers, with a little reverb. The mic is
@@ -255,8 +278,15 @@
       stream.getTracks().forEach((t) => t.stop());
       throw new Error("The mic was turned off");
     }
-    const channels = stream.getAudioTracks()[0].getSettings().channelCount || 2;
-    return { stream, source: m.ctx.createMediaStreamSource(stream), channels };
+    const settings = stream.getAudioTracks()[0].getSettings();
+    try {
+      return { stream, source: m.ctx.createMediaStreamSource(stream), channels: settings.channelCount || 2 };
+    } catch (e) {
+      // Firefox refuses a mic whose sample rate differs from the AudioContext's; startMic retries at the mic's rate.
+      stream.getTracks().forEach((t) => t.stop());
+      e.rate = settings.sampleRate;
+      throw e;
+    }
   }
 
   // Bring the open devices and strips in line with the host's list. Calls queue up, so a slider
@@ -288,7 +318,7 @@
         m.key = micKey(list);
         if (error) {
           if (!m.streams.size) throw error;
-          flash("Couldn't open one of the microphones.");
+          flash("Couldn't open one of the microphones (" + (error.name || "error") + ").");
         }
         reportOutputs();
       }
@@ -297,15 +327,16 @@
     return m.queue;
   }
 
-  async function startMic() {
-    const ctx = new AudioContext({ latencyHint: "interactive" });
+  async function startMic(rate) {
+    const ctx = new AudioContext(rate ? { latencyHint: "interactive", sampleRate: rate } : { latencyHint: "interactive" });
     mic = { ctx, chain: KQVoice.build(ctx), streams: new Map(), strips: [], key: "", failed: new Set(), queue: Promise.resolve() };
     mic.chain.mix.connect(ctx.destination);
-    if (display.sink && ctx.setSinkId) ctx.setSinkId(display.sink).catch(() => {});
+    if (display.sink) routeMic();
     try {
       await syncMics();
     } catch (e) {
       stopMic();
+      if (e.name === "NotSupportedError" && e.rate && e.rate !== ctx.sampleRate) return startMic(e.rate);
       throw e;
     }
   }
@@ -314,6 +345,7 @@
     if (!mic) return;
     stopRecording(display.record);
     for (const open of mic.streams.values()) open.stream.getTracks().forEach((t) => t.stop());
+    if (mic.out) mic.out.srcObject = null;
     mic.ctx.close();
     mic = null;
   }
@@ -327,7 +359,7 @@
         micState = "blocked";
         flash(e.name === "NotAllowedError"
           ? "This screen isn't allowed to use the microphone. Allow it in the browser's site settings."
-          : "Couldn't find a microphone on this screen.");
+          : "Couldn't open a microphone on this screen (" + (e.name || "error") + ").");
       }).finally(() => { micStarting = null; report(); });
       await micStarting;
       if (!want()) return applyMic(); // turned off again while the browser was asking
@@ -815,8 +847,8 @@
   const START = {
     start: ["Tap to start", "Tap to turn on sound and go full screen. Your next great performance starts here."],
     fullscreen: ["Tap to go full screen", "The host asked this screen to fill the display. Browsers need one tap first."],
-    speakers: ["Tap to list speakers", "The host wants to pick which speakers this screen uses. Allow the microphone"
-      + " when asked: that's how browsers let a page see its speakers. Nothing gets recorded."],
+    speakers: ["Tap to list speakers", "The host wants to pick which speakers this screen uses. "
+      + (canPick ? "Choose the speakers in the browser's picker." : "Allow the microphone when asked: that's how browsers let a page see its speakers. Nothing gets recorded.")],
   };
   let startWhy = "start";
   function showStart(why) {

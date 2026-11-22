@@ -134,7 +134,7 @@ def test_screens_show_up_for_the_host_and_take_commands():
                           "muted": False, "sink": "", "mic": False, "mic_volume": 80, "reverb": 25, "echo": 0, "voice": "normal",
                           "mics": [], "record": False,
                           "state": "playing", "mic_state": "on", "recording": True, "time": 12.3, "duration": None,
-                          "reason": "", "audio": "unsupported", "outputs": [], "inputs": [], "panel": False}
+                          "reason": "", "audio": "unsupported", "picker": False, "outputs": [], "inputs": [], "panel": False}
         # A song that won't play says why, for the host's panel.
         tv.send_json({"type": "status", "state": "error", "reason": "  YouTube won't\nplay this " + "x" * 300})
         assert tv.receive_json() == {"type": "displays"}
@@ -150,7 +150,12 @@ def test_screens_show_up_for_the_host_and_take_commands():
         assert screen["outputs"][:2] == [{"id": "default", "label": "Speaker 1"},
                                          {"id": "hdmi-1", "label": "TV speakers"}]
         assert len(screen["outputs"]) == 17  # 20 looked at, 3 of them malformed
-        assert screen["audio"] == "ready"
+        assert screen["audio"] == "ready" and screen["picker"] is False
+
+        tv.send_json({"type": "outputs", "audio": "ready", "picker": True, "outputs": [{"id": "hdmi-1", "label": "TV"}]})
+        assert tv.receive_json() == {"type": "displays"}
+        [screen] = client.get(f"/api/rooms/{code}/displays", headers=host).json()
+        assert screen["picker"] is True  # Firefox screens can pick more speakers after the first
 
         tv.send_json({"type": "outputs", "audio": "ready", "outputs": [], "inputs": [
             {"id": "usb-1", "label": "Scarlett 2i2", "channels": 2}, {"id": "usb-2", "label": ""}, {"id": "usb-3", "channels": 99}]})
