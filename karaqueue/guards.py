@@ -35,9 +35,10 @@ class Protect:
         self.app = app
         # YouTube's player is a script from youtube.com in an iframe from youtube-nocookie.com;
         # thumbnails come from ytimg.com. Inline style attributes are allowed: the pages set a few.
+        # frame-src 'self' lets the host page load its own hidden screen when the sound plays from it.
         self.csp = ("default-src 'self'; script-src 'self' https://www.youtube.com " + inline_scripts(static) + "; "
                     "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.ytimg.com; "
-                    "media-src 'self' blob:; frame-src https://www.youtube-nocookie.com https://www.youtube.com; "
+                    "media-src 'self' blob:; frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com; "
                     "object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'self'; connect-src 'self'")
         self.headers = [(b"x-content-type-options", b"nosniff"), (b"x-frame-options", b"SAMEORIGIN"),
                         (b"referrer-policy", b"strict-origin-when-cross-origin"),

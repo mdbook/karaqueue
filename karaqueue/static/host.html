@@ -732,7 +732,7 @@
       });
       addMicBtn.disabled = mics.length >= MAX_MICS;
       setNote(micListNote, !mics.length ? "Using the default microphone, in the middle. Add one to choose which mic, and set its level and balance."
-        : inputs.length < 2 ? "Turn the mic on to list this screen's microphones."
+        : !inputs.length ? (s.mic ? "The list fills in once the mic is open on the screen." : "Turn the mic on to list this screen's microphones.")
         : mics.length >= MAX_MICS ? "That's four, the most a screen mixes."
         : "A Scarlett 2i2 is one device with two inputs: add it twice and pick Input 1 and Input 2.");
     }
@@ -907,6 +907,7 @@
       paintMicList(s);
       setNote(micNote, s.mic_state === "blocked"
         ? "The screen wasn't allowed to use its microphone. Allow it in that browser's site settings, then turn the mic on again."
+        : s.mic && s.mic_state === "waiting" ? "Waiting for " + s.name + " to open its mic. Allow it if it asks. Some browsers hold the mic until you click into that screen's tab or window once."
         : s.mic && s.mic_state === "on" ? "Keep the mic behind the speakers, or it'll squeal." : "");
 
       recSetting.hidden = !recordingsOn;

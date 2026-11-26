@@ -25,7 +25,7 @@ ACTIONS = ("play", "pause", "restart", "seek", "identify", "fullscreen", "speake
 # Can the screen pick its speakers: no (browser or plain http), not yet (needs a tap), yes.
 AUDIO = ("unsupported", "locked", "ready")
 STATES = ("idle", "playing", "paused", "buffering", "ended", "error")
-MICS = ("unsupported", "off", "on", "blocked")
+MICS = ("unsupported", "off", "waiting", "on", "blocked")
 VOICES = ("normal", "chipmunk")
 KEY_RANGE = 12  # semitones the song can be moved up or down
 DEFAULTS = {"name": "Screen", "layout": "split", "volume": 100, "muted": False, "sink": "",

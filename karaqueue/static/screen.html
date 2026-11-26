@@ -363,6 +363,9 @@
     // The mic belongs with the sound: a screen that's following another one keeps it off.
     const want = () => display.mic && !following();
     if (want() && !mic) {
+      // "waiting" until the browser opens it: it may be asking, or holding the mic until
+      // someone clicks into this tab or window (some browsers do). The host sees which.
+      if (!micStarting) { micState = "waiting"; report(); }
       micStarting = micStarting || startMic().then(() => { micState = "on"; reportOutputs(); }, (e) => {
         micState = "blocked";
         flash(e.name === "NotAllowedError"

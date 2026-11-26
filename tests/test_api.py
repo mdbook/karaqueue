@@ -141,6 +141,10 @@ def test_screens_show_up_for_the_host_and_take_commands():
         [screen] = client.get(f"/api/rooms/{code}/displays", headers=host).json()
         assert screen["state"] == "error" and screen["reason"].startswith("YouTube won't play this x")
         assert len(screen["reason"]) == 200
+        # A mic the browser hasn't opened yet (asking, or waiting for a click) says so.
+        tv.send_json({"type": "status", "state": "idle", "mic": "waiting"})
+        assert tv.receive_json() == {"type": "displays"}
+        assert client.get(f"/api/rooms/{code}/displays", headers=host).json()[0]["mic_state"] == "waiting"
 
         tv.send_json({"type": "outputs", "audio": "ready", "outputs": [
             {"id": "default", "label": ""}, {"id": "hdmi-1", "label": "  TV   speakers "},
@@ -574,6 +578,7 @@ def test_responses_carry_security_headers_and_big_bodies_are_refused():
     res = client.get("/")
     csp = res.headers["content-security-policy"]
     assert "default-src 'self'" in csp and "frame-ancestors 'self'" in csp and "object-src 'none'" in csp
+    assert "frame-src 'self' " in csp  # the host page's own sound screen is a same-origin frame
     assert "'sha256-" in csp and csp.endswith("connect-src 'self' ws://testserver wss://testserver")
     assert res.headers["x-content-type-options"] == "nosniff" and res.headers["x-frame-options"] == "SAMEORIGIN"
     assert "strict-transport-security" not in res.headers  # only over https
