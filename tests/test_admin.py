@@ -432,3 +432,77 @@ def test_admin_fails_closed_with_no_password_set(monkeypatch, env_value):
             if got.status_code != 422:  # 422 is the body check running first, which still gave nothing away
                 assert got.status_code == 401, (method, path)
     assert client.get("/api/admin", headers=bearer("made-up")).status_code == 401
+
+
+def test_signed_in_hosts_see_their_own_rooms_on_any_device_and_nobody_elses(monkeypatch):
+    monkeypatch.setenv("KARAQUEUE_ADMIN_PASSWORD", "correct horse")
+    client = TestClient(create_app(Store()))
+    root = bearer(client.post("/api/admin/login", json={"password": "correct horse"}).json()["token"])
+    for name in ("Sam", "Kit"):
+        client.post("/api/admin/users", headers=root, json={"name": name, "role": "host", "password": "long enough"})
+    log_in = lambda name: bearer(client.post(  # noqa: E731
+        "/api/admin/login", json={"name": name, "password": "long enough"}).json()["token"])
+    sam, kit = log_in("Sam"), log_in("Kit")
+
+    # Rooms started signed in are tied to the account, with accounts required or not.
+    friday = client.post("/api/rooms", headers=sam, json={"name": "Friday"}).json()["code"]
+    client.post("/api/rooms", json={"name": "Anyone's"})
+    client.put("/api/admin/settings/new_rooms", headers=root, json={"value": "accounts"})
+    saturday = client.post("/api/rooms", headers=sam, json={"name": "Saturday"}).json()["code"]
+    client.post("/api/rooms", headers=kit, json={"name": "Kit's"})
+    client.post("/api/rooms", headers=root, json={"name": "Admin's"})
+
+    mine = client.get("/api/admin/me/rooms", headers=sam).json()
+    assert mine["account"] is True and sorted(r["code"] for r in mine["rooms"]) == sorted([friday, saturday])
+    assert set(mine["rooms"][0]) == {"code", "name", "created_at", "touched_at"}  # never a key
+    assert [r["name"] for r in client.get("/api/admin/me/rooms", headers=kit).json()["rooms"]] == ["Kit's"]
+    assert client.get("/api/admin/me/rooms", headers=root).json() == {"account": False, "rooms": []}
+    assert client.get("/api/admin/me/rooms").status_code == 401
+
+    # The owner gets a host key for this device; another account can't, even knowing the code.
+    assert client.post(f"/api/admin/me/rooms/{friday}/host", headers=kit).status_code == 404
+    assert client.post(f"/api/admin/me/rooms/{friday}/host").status_code == 401
+    key = client.post(f"/api/admin/me/rooms/{friday}/host", headers=sam).json()["host_token"]
+    assert client.get(f"/api/rooms/{friday}/me", headers=bearer(key)).json() == {"role": "host"}
+    assert client.get(f"/api/rooms/{friday}/host", headers=bearer(key)).status_code == 200
+    assert client.get(f"/api/rooms/{friday}/me", headers=sam).status_code == 401  # the sign-in itself isn't a room key
+
+    # When anyone may start rooms, a stale sign-in just starts a room with no owner.
+    client.put("/api/admin/settings/new_rooms", headers=root, json={"value": "anyone"})
+    assert client.post("/api/rooms", headers=bearer("made-up"), json={"name": "Typo"}).status_code == 200
+    assert client.get("/api/config").json()["room_days"] == 30
+
+
+@pytest.mark.parametrize("revoke", ["log out", "password reset", "new password", "turned off", "deleted",
+                                    "signed out everywhere"])
+def test_a_host_key_from_your_account_stops_working_when_that_sign_in_ends(monkeypatch, revoke):
+    monkeypatch.setenv("KARAQUEUE_ADMIN_PASSWORD", "correct horse")
+    client = TestClient(create_app(Store()))
+    root = bearer(client.post("/api/admin/login", json={"password": "correct horse"}).json()["token"])
+    sam_id = client.post("/api/admin/users", headers=root,
+                         json={"name": "Sam", "role": "host", "password": "long enough"}).json()["users"][0]["id"]
+    log_in = lambda: bearer(client.post(  # noqa: E731
+        "/api/admin/login", json={"name": "Sam", "password": "long enough"}).json()["token"])
+    laptop, phone = log_in(), log_in()
+    room = client.post("/api/rooms", headers=laptop, json={"name": "Friday"}).json()
+    key = bearer(client.post(f"/api/admin/me/rooms/{room['code']}/host", headers=phone).json()["host_token"])
+    assert client.get(f"/api/rooms/{room['code']}/host", headers=key).status_code == 200
+
+    if revoke == "log out":
+        client.post("/api/admin/logout", headers=phone)
+    elif revoke == "password reset":
+        link = client.post("/api/admin/invites", headers=root, json={"user": sam_id}).json()["link"].split("#invite=")[1]
+        client.post("/api/invites/accept", json={"link": link, "password": "brand new pw"})
+    elif revoke == "new password":
+        client.patch(f"/api/admin/users/{sam_id}", headers=root, json={"password": "brand new pw"})
+    elif revoke == "turned off":
+        client.patch(f"/api/admin/users/{sam_id}", headers=root, json={"disabled": True})
+    elif revoke == "deleted":
+        client.delete(f"/api/admin/users/{sam_id}", headers=root)
+    else:
+        client.delete(f"/api/admin/users/{sam_id}/sessions", headers=root)
+
+    assert client.get(f"/api/rooms/{room['code']}/host", headers=key).status_code == 401
+    assert client.get(f"/api/rooms/{room['code']}/me", headers=key).status_code == 401
+    # The key the room was started with isn't tied to a sign-in, and keeps working.
+    assert client.get(f"/api/rooms/{room['code']}/host", headers=bearer(room["host_token"])).status_code == 200

@@ -43,3 +43,14 @@ Phones die, browsers get cleared, people switch to a friend's phone. A guest can
 - **With a guest account:** guests can make one from the join page with just a name and a password (no email). It works in every room on the server, so signing in and pressing Join as (their name) puts them right back on their spot. A guest who joined first can tie their spot to an account later, from the bottom of their page.
 
 One singer can be signed in on 5 phones at once. A sixth signs the oldest out.
+
+## Your rooms on the home page
+
+The home page has a Your rooms section under the big headline, with two columns: Hosting and Joined. Each room shows its code, who's singing (or when it was last used), and in rooms you joined, your place in line. Live rooms come first. Tap a room to go straight back to the host page or your spot. Each column shows 4 rooms, with Show more for the rest. When you have none yet, the section says so and explains what will show up there.
+
+Where the list comes from is written at the top of each column:
+
+- **On this browser:** every room this browser started or joined keeps its key in the browser, and the list is made from those. Nothing is sent anywhere to build it. Forget takes a room off the list and drops its key from this browser, which signs this browser out of it.
+- **On your account:** signed in as a host (or with [SSO](admin.md#sign-in-with-oidc)), Hosting lists the rooms your account started, on any phone or computer. Opening one from a device that didn't start it gives that device its own host key, which lasts only as long as you're signed in there. Signing out on that device stops it hosting the room. So does anything else that ends the sign-in: signing out everywhere, a new password, or an admin turning off or deleting your account. Sign in again and open the room to host it from there once more. The device that started the room keeps its own key, signed in or not. Signed in with a guest account, Joined lists the rooms that account is in. Other accounts never see your rooms.
+
+A room that's been deleted, because nobody touched it for `KARAQUEUE_ROOM_DAYS` days or an admin removed it, moves into a closed rooms group at the bottom of the column. Forget closed rooms clears them out. Rooms started before your server had this, or with the built-in admin password, aren't on any account; they still show from the browser that started them.

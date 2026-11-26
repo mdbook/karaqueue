@@ -9,7 +9,7 @@
 </head>
 <body>
 <a class="skip-link" href="#main">Skip to content</a>
-<header class="home-bar wrap"><a class="wordmark" href="/"><span class="brand-symbol" aria-hidden="true"><i></i><i></i><i></i></span>KaraQueue</a><div class="home-links"><a href="#how-it-works">How it works</a><label class="theme-picker"><span class="sr">Color theme</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg><select data-theme-picker aria-label="Color theme"><option value="sunset">Sunset</option><option value="midnight">Midnight</option><option value="daylight">Daylight</option></select></label></div></header>
+<header class="home-bar wrap"><a class="wordmark" href="/"><span class="brand-symbol" aria-hidden="true"><i></i><i></i><i></i></span>KaraQueue</a><div class="home-links"><a href="#your-rooms" id="rooms-link" hidden>Your rooms</a><a href="#how-it-works">How it works</a><label class="theme-picker"><span class="sr">Color theme</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg><select data-theme-picker aria-label="Color theme"><option value="sunset">Sunset</option><option value="midnight">Midnight</option><option value="daylight">Daylight</option></select></label></div></header>
 <main id="main" class="home wrap">
   <section class="hero" aria-labelledby="title">
     <div class="hero-copy">
@@ -38,6 +38,7 @@
       <figcaption>A little less waiting. A lot more singing.</figcaption>
     </figure>
   </section>
+  <section class="your-rooms" id="your-rooms" aria-labelledby="rooms-title" hidden></section>
   <section class="how" id="how-it-works" aria-labelledby="how-title"><div class="how-intro"><h2 id="how-title">From “just one song”<br>to the last encore.</h2><p class="muted">Your phone is the songbook.<br>The room is your stage.</p></div><ol class="steps"><li><span class="step-number">1</span><div><h3>Make yourself at home</h3><p>Scan the QR code or enter the room code. Pick a name and you're in.</p></div></li><li><span class="step-number">2</span><div><h3>Find your anthem</h3><p>Add songs from YouTube or the host's library. Put your favorites first.</p></div></li><li><span class="step-number">3</span><div><h3>Take your moment</h3><p>Everyone sings once before anyone sings twice. We'll show you when you're up.</p></div></li></ol></section>
   <div id="flash" role="status" aria-live="polite" hidden></div>
 </main>
@@ -83,16 +84,217 @@ tabs.forEach(tab => {
     sso.hidden = !needed || !!account || !ssoConfig;
     create.hidden = needed && !account;
     hint.replaceChildren(needed && account
-      ? h("span", {}, "Signed in as " + account.name + ". ", h("a", { href: "#", onclick: (e) => { e.preventDefault(); signOut(); showAccount(true); } }, "Sign out"))
+      ? h("span", {}, "Signed in as " + account.name + ". ", h("a", { href: "#", onclick: (e) => { e.preventDefault(); signOut(); showAccount(true); act(loadRooms)(); } }, "Sign out"))
       : hintText);
   }
+
+  // ---- Your rooms: the rooms this browser keeps a key for (kq:<CODE>), plus the ones kept on a
+  // signed-in account (rooms a host started, rooms a guest account joined). ----
+  const roomsBox = document.getElementById("your-rooms"), roomsLink = document.getElementById("rooms-link");
+  const SHOWN = 4; // rooms in a column before "Show N more"
+  const expanded = new Set();
+  let roomDays = 30;
+  let rooms = { hosting: [], joined: [], hostSrc: "browser", joinSrc: "browser", name: null };
+
+  const ordinal = (n) => {
+    const s = ["th", "st", "nd", "rd"], v = n % 100;
+    return n + (s[(v - 20) % 10] || s[v] || s[0]);
+  };
+  const plural = (n, one, many) => n + " " + (n === 1 ? one : many);
+  const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+  function ago(when) {
+    const s = Math.max(0, Date.now() / 1000 - when);
+    const [n, unit] = s < 3600 ? [Math.max(1, Math.round(s / 60)), "minute"] : s < 86400 ? [Math.round(s / 3600), "hour"]
+      : s < 7 * 86400 ? [Math.round(s / 86400), "day"] : s < 30 * 86400 ? [Math.round(s / 604800), "week"] : [Math.round(s / 2592000), "month"];
+    const text = rtf.format(-n, unit);
+    return text.charAt(0).toUpperCase() + text.slice(1);
+  }
+  function icon(d) {
+    const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg"), path = document.createElementNS(ns, "path");
+    for (const [k, v] of Object.entries({ viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "1.7",
+      "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true" })) svg.setAttribute(k, v);
+    path.setAttribute("d", d);
+    svg.append(path);
+    return svg;
+  }
+
+  // Room keys are kq:<CODE> with a role; the other kq: keys (theme, account, guest) are lower case.
+  function savedRooms() {
+    const out = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const m = /^kq:([A-Z0-9]+)$/.exec(localStorage.key(i) || "");
+      const saved = m && keys.get(m[1]);
+      if (saved && saved.token && (saved.role === "host" || saved.role === "singer")) out.push({ ...saved, code: m[1], src: "browser" });
+    }
+    return out;
+  }
+  async function getJSON(path, token, method = "GET") {
+    const res = await fetch("/api" + path, { method, headers: token ? { Authorization: "Bearer " + token } : {} });
+    return { status: res.status, data: res.ok ? await res.json() : null };
+  }
+
+  // Singers take turns in rotation order, starting from whoever is up next (as on the guest page).
+  function turnOrder(state) {
+    const ready = state.rotation.filter((s) => s.queued > 0);
+    const i = state.up_next ? ready.findIndex((s) => s.name === state.up_next.singer) : -1;
+    return i < 0 ? ready : ready.slice(i).concat(ready.slice(0, i));
+  }
+  // Where you stand in a room you joined: found by this browser's singer id, or by your account name.
+  function spotOf(state, who) {
+    const mine = state.rotation.find((s) => (who.id != null ? s.id === who.id : s.name === who.name));
+    if (!mine) return null;
+    const np = state.now_playing;
+    if (np && np.singer === mine.name) return { text: "You're singing" };
+    if (!mine.queued) return { text: "Nothing queued", calm: true };
+    if (!np) return { text: plural(mine.queued, "song queued", "songs queued"), calm: true };
+    const i = turnOrder(state).findIndex((s) => s.id === mine.id);
+    return i < 0 ? { text: "On hold", calm: true } : { text: i === 0 ? "You're up next" : "You're " + ordinal(i + 1) + " in line" };
+  }
+
+  // A deleted room (quiet too long, or removed by an admin) is a 404: its key moves to the closed group.
+  async function look(item) {
+    if (item.closed) return item;
+    const room = await getJSON("/rooms/" + item.code);
+    const saved = item.src === "browser" ? keys.get(item.code) : null;
+    if (room.status === 404) {
+      if (saved) keys.set(item.code, { ...saved, closed: true });
+      return item.src === "browser" ? { ...item, closed: true } : null;
+    }
+    if (!room.data) return null;
+    if (saved && saved.name !== room.data.name) keys.set(item.code, { ...saved, name: room.data.name }); // for the closed group later
+    if (item.role === "host" && item.src === "account" && item.token) {
+      // A key this device got from a sign-in that has since ended no longer works; get a new one on open.
+      const me = await getJSON("/rooms/" + item.code + "/me", item.token);
+      if (me.status === 401) { keys.drop(item.code); item = { ...item, token: undefined }; }
+    }
+    let spot = null;
+    if (item.role === "singer") {
+      const me = item.token ? await getJSON("/rooms/" + item.code + "/me", item.token) : null;
+      spot = spotOf(room.data, me && me.data && me.data.role === "singer" ? { id: me.data.id } : { name: item.account });
+    }
+    return { ...item, name: room.data.name, state: room.data, spot };
+  }
+
+  async function loadRooms() {
+    const account = signedIn(), guest = keys.get("guest");
+    const [owned, info] = await Promise.all([
+      account ? getJSON("/admin/me/rooms", account.token).catch(() => null) : null,
+      guest ? getJSON("/guests/me", guest.token).catch(() => null) : null]);
+    if (info && info.status === 401) keys.drop("guest"); // signed out elsewhere, as the guest page does
+    const hostAccount = !!(owned && owned.data && owned.data.account), joinAccount = !!(info && info.data);
+    const hosting = new Map(), joined = new Map();
+    if (hostAccount) for (const r of owned.data.rooms) hosting.set(r.code, { code: r.code, name: r.name, role: "host", src: "account" });
+    if (joinAccount) for (const r of info.data.rooms) joined.set(r.code, { code: r.code, name: r.name, role: "singer", src: "account", account: info.data.name });
+    for (const saved of savedRooms()) {
+      const list = saved.role === "host" ? hosting : joined, had = list.get(saved.code);
+      list.set(saved.code, had ? { ...had, token: saved.token } : saved);
+    }
+    const found = (await Promise.all([...hosting.values(), ...joined.values()].map((r) => look(r).catch(() => null)))).filter(Boolean);
+    // Live rooms first, then the most recently used.
+    const live = (r) => (r.state && r.state.now_playing ? 1 : 0), used = (r) => (r.state ? r.state.touched_at : 0);
+    const order = (a, b) => live(b) - live(a) || used(b) - used(a);
+    rooms = {
+      hosting: found.filter((r) => r.role === "host").sort(order), joined: found.filter((r) => r.role === "singer").sort(order),
+      hostSrc: hostAccount ? "account" : "browser", joinSrc: joinAccount ? "account" : "browser",
+      name: hostAccount ? account.name : joinAccount ? info.data.name : null,
+    };
+    renderRooms();
+  }
+
+  function forget(codes, message) {
+    codes.forEach((c) => keys.drop(c));
+    const keep = (r) => !(codes.includes(r.code) && (r.src === "browser" || r.closed));
+    rooms.hosting = rooms.hosting.filter(keep);
+    rooms.joined = rooms.joined.filter(keep);
+    renderRooms();
+    flash(message, "ok");
+  }
+
+  // A room you started on another device: get this one its own host key first.
+  const openOwned = (r, href) => act(async (e) => {
+    e.preventDefault();
+    const res = await getJSON("/admin/me/rooms/" + r.code + "/host", signedIn()?.token, "POST");
+    if (!res.data) throw new Error("Couldn't open the host booth. Sign in again, then try once more.");
+    keys.set(r.code, { role: "host", token: res.data.host_token, name: r.name });
+    location.href = href;
+  });
+
+  function roomRow(r) {
+    const host = r.role === "host", href = "/r/" + r.code + (host ? "/host" : "");
+    const name = r.name || "Room " + r.code;
+    let status;
+    if (r.closed) status = [h("span", {}, roomDays > 0 ? "Closed after " + plural(roomDays, "quiet day", "quiet days") : "Closed")];
+    else if (r.state.now_playing) {
+      status = [h("span", { class: "st" }, h("span", { class: "live-dot", "aria-hidden": "true" }), r.state.now_playing.singer + " is singing"),
+        h("span", { class: "faint" }, "· " + turnOrder(r.state).length + " in line")];
+    } else {
+      status = [h("span", {}, "Quiet · " + ago(r.state.touched_at)), h("span", { class: "faint" }, "· " + plural(r.state.rotation.length, "singer", "singers"))];
+    }
+    status.unshift(h("span", { class: "code inline-code" }, h("span", { class: "sr" }, "Room code "), r.code));
+    if (r.spot && !r.closed) status.push(h("span", { class: "spot" + (r.spot.calm ? " calm" : "") }, r.spot.text));
+    const needsKey = host && r.src === "account" && !(keys.get(r.code) || {}).token;
+    return h("li", { class: "room" + (r.closed ? " closed" : "") },
+      h("div", { class: "room-tile" }, h("span", { class: "code" }, h("span", { class: "sr" }, "Room code "), r.code)),
+      h("div", { class: "room-main" },
+        r.closed ? h("span", { class: "room-name" }, name) : h("a", { class: "room-name", href, onclick: needsKey ? openOwned(r, href) : null }, name),
+        h("div", { class: "room-status" }, status)),
+      r.closed ? null : h("span", { class: "room-go", "aria-hidden": "true" }, h("span", {}, host ? "Host booth" : "Rejoin"), icon("M9 6l6 6-6 6")),
+      r.src === "browser" || r.closed
+        ? h("button", { type: "button", class: "forget icon", "aria-label": "Forget " + name + " on this browser", title: "Forget on this browser",
+          onclick: () => forget([r.code], "Forgot " + name + " on this browser") }, icon("M7 7l10 10M17 7L7 17"))
+        : null);
+  }
+
+  function roomList(items, key) {
+    const open = items.filter((r) => !r.closed), closed = items.filter((r) => r.closed);
+    const shown = expanded.has(key) ? open : open.slice(0, SHOWN);
+    const toggle = (on) => () => { if (on) expanded.add(key); else expanded.delete(key); renderRooms(); };
+    const out = [h("ul", { class: "room-list" }, shown.map(roomRow))];
+    if (open.length > shown.length) out.push(h("div", { class: "more-row" }, h("button", { type: "button", class: "ghost small", onclick: toggle(true) }, "Show " + (open.length - shown.length) + " more")));
+    else if (expanded.has(key) && open.length > SHOWN) out.push(h("div", { class: "more-row" }, h("button", { type: "button", class: "quiet small", onclick: toggle(false) }, "Show fewer")));
+    if (closed.length) out.push(h("details", { class: "closed-group" },
+      h("summary", {}, plural(closed.length, "closed room", "closed rooms")),
+      h("ul", { class: "room-list" }, closed.map(roomRow)),
+      h("div", { class: "more-row" }, h("button", { type: "button", class: "quiet small",
+        onclick: () => forget(closed.map((r) => r.code), "Forgot the closed rooms") }, "Forget closed rooms"))));
+    return out;
+  }
+
+  function renderRooms() {
+    const { hosting, joined, hostSrc, joinSrc, name } = rooms;
+    const total = hosting.length + joined.length;
+    roomsLink.hidden = !total;
+    const head = h("div", { class: "rooms-head" }, h("div", {}, h("h2", { id: "rooms-title" }, "Your rooms"),
+      h("p", { class: "muted" }, !total ? "Nothing here yet." : (name ? "Signed in as " + name + ". " : "") + "Hop back into a party.")));
+    if (!total) {
+      roomsBox.replaceChildren(head, h("div", { class: "rooms-empty" }, h("span", { class: "brand-symbol", "aria-hidden": "true" }, h("i"), h("i"), h("i")),
+        h("p", {}, "Rooms you join or host show up here, so you can hop back in after a dead phone or a closed tab.")));
+      roomsBox.hidden = false;
+      return;
+    }
+    const startOne = () => { const tab = document.getElementById("host-tab"); tab.click(); tab.focus(); };
+    const col = (title, items, src, empty) => h("div", { class: "rooms-col" },
+      h("h3", {}, title, h("span", { class: "count" }, String(items.length)), h("span", { class: "col-source" }, src === "account" ? "On your account" : "On this browser")),
+      items.length ? roomList(items, title) : h("p", { class: "col-empty" }, empty));
+    roomsBox.replaceChildren(head, h("div", { class: "rooms-cols" },
+      col("Hosting", hosting, hostSrc, joinSrc === "account" && hostSrc !== "account" ? "Rooms you start on this browser show up here."
+        : ["Nothing yet. Start one from ", h("button", { type: "button", class: "link", onclick: startOne }, "Host a night"), "."]),
+      col("Joined", joined, joinSrc, "Rooms you join show up here.")));
+    if (hostSrc === "browser" && joinSrc === "browser") {
+      roomsBox.append(h("p", { class: "rooms-note" }, "Saved on this browser. Sign in, or tie your spot to a guest account, to see them on any phone."));
+    }
+    roomsBox.hidden = false;
+  }
+
   act(async () => {
     const arrived = await receiveOIDC().catch((err) => { flash(err.message); return false; });
     const cfg = await (await fetch("/api/config")).json();
     ssoConfig = cfg.oidc;
+    roomDays = cfg.room_days;
     if (ssoConfig) sso.replaceChildren(h("button", { type: "button", onclick: () => location.assign("/auth/oidc/start") }, ssoConfig.name));
     showAccount(!!cfg.accounts_only);
     if (arrived) document.getElementById("host-tab").click();
+    await loadRooms();
   })();
   accountForm.onsubmit = act(async (e) => {
     e.preventDefault();
@@ -107,6 +309,7 @@ tabs.forEach(tab => {
     document.getElementById("account-pw").value = "";
     showAccount(true);
     document.getElementById("name").focus();
+    await loadRooms();
   });
 
   create.onsubmit = act(async (e) => {
@@ -127,7 +330,7 @@ tabs.forEach(tab => {
         showAccount(true);
       }
       if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Couldn't create the room. Try again in a moment.");
-      keys.set(data.code, { role: "host", token: data.host_token });
+      keys.set(data.code, { role: "host", token: data.host_token, name: document.getElementById("name").value.trim() });
       location.href = "/r/" + data.code + "/host";
     } catch (err) {
       button.disabled = false;

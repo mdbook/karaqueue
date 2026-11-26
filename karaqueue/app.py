@@ -419,17 +419,17 @@ def create_app(store: Optional[Store] = None) -> FastAPI:
 
     @app.post("/api/rooms")
     def create_room(body: RoomIn, tok: Optional[str] = Depends(token)):
-        if cfg.get("new_rooms") == "accounts":
-            cfg.require(tok, role="host")
+        # Signed in, the room is tied to the account, so its owner finds it again from any device.
+        who = cfg.require(tok, role="host") if cfg.get("new_rooms") == "accounts" else cfg.whoami(tok)
         sweep()
-        return store.create_room(body.name)
+        return store.create_room(body.name, owner_id=who["id"] if who else None)
 
     @app.get("/api/config")
     def config():
         return {"youtube_search": bool(cfg.get("youtube_api_key") or downloads() or saver()), "library": library() is not None,
                 "recordings": recordings_dir() is not None, "downloads": downloads() is not None,
                 "saving": saver() is not None and cfg.get("who_saves") == "hosts",
-                "accounts_only": cfg.get("new_rooms") == "accounts", **oidc.public()}
+                "accounts_only": cfg.get("new_rooms") == "accounts", "room_days": cfg.get("room_days"), **oidc.public()}
 
     # Every search runs yt-dlp or spends API quota, and party guests search the same songs, so
     # answers are kept a while. ponytail: two searches at once for the whole server, and the
@@ -997,6 +997,19 @@ def create_app(store: Optional[Store] = None) -> FastAPI:
     @app.get("/api/admin/me")
     def admin_me(tok: Optional[str] = Depends(token)):
         return cfg.require(tok, role="host")
+
+    @app.get("/api/admin/me/rooms")
+    def my_rooms(tok: Optional[str] = Depends(token)):
+        """The rooms the signed-in account started, for the home page. `account` is false for the
+        built-in admin password, which isn't an account and so owns no rooms."""
+        who = cfg.require(tok, role="host")
+        return {"account": who["id"] is not None, "rooms": store.owned_rooms(who["id"])}
+
+    @app.post("/api/admin/me/rooms/{code}/host")
+    def my_room_host_key(code: str, tok: Optional[str] = Depends(token)):
+        """A host key for one of your own rooms, for a device that didn't start it."""
+        who = cfg.require(tok, role="host")
+        return {"code": code.upper(), "host_token": store.owner_host_key(code, who["id"], tok)}
 
     def admin_state() -> dict:
         open_rooms = {c: len(s) for c, s in hub.rooms.items()}

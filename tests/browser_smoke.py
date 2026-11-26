@@ -12,7 +12,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 import json
 from pathlib import Path
 from playwright.sync_api import sync_playwright, expect
@@ -346,6 +346,7 @@ def run_checks(base_url, output):
         landing.set_viewport_size({"width": 390, "height": 844})
         landing.get_by_label("Color theme").select_option("sunset")
         shot(landing, "home-mobile")
+        check_your_rooms(browser)
         assert not errors, errors
         print(
             json.dumps(
@@ -358,6 +359,93 @@ def run_checks(base_url, output):
             )
         )
         browser.close()
+
+
+def call(method, path, body=None, token=None):
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = "Bearer " + token
+    data = None if body is None else json.dumps(body).encode()
+    with urlopen(Request(BASE + path, data=data, headers=headers, method=method), timeout=10) as res:
+        return json.loads(res.read())
+
+
+def check_your_rooms(browser, admin_password="design-test-only"):
+    """The Your rooms section on the home page: the empty hint, rooms kept on this browser (hosting,
+    joined, closed, more than fit), and a signed-in host's rooms on another device only."""
+    context = browser.new_context(viewport={"width": 1440, "height": 1000}, reduced_motion="reduce")
+    page = context.new_page()
+    track(page)
+    page.goto(BASE)
+    section = page.locator("#your-rooms")
+    expect(section).to_contain_text("Nothing here yet.")
+    expect(section.locator(".rooms-empty")).to_be_visible()
+    expect(page.locator("#rooms-link")).to_be_hidden()
+    shot(page, "home-rooms-empty")
+
+    hosted = [call("POST", "/api/rooms", {"name": f"Party {n}"}) for n in range(5)]
+    office = call("POST", "/api/rooms", {"name": "Office holiday party"})
+    maya = call("POST", f"/api/rooms/{office['code']}/singers", {"name": "Maya"})
+    seed = {f"kq:{r['code']}": {"role": "host", "token": r["host_token"]} for r in hosted}
+    seed[f"kq:{office['code']}"] = {"role": "singer", "token": maya["token"]}
+    seed["kq:ZZZZZZ"] = {"role": "singer", "token": "long gone", "name": "Sunday sing-along"}
+    page.evaluate("s => { for (const [k, v] of Object.entries(s)) localStorage.setItem(k, JSON.stringify(v)); }", seed)
+    page.reload()
+    hosting, joined = section.locator(".rooms-col").nth(0), section.locator(".rooms-col").nth(1)
+    expect(hosting.locator("h3")).to_contain_text("On this browser")
+    expect(hosting.locator(".count")).to_have_text("5")
+    expect(hosting.locator("ul.room-list > li")).to_have_count(4)
+    expect(page.locator("#rooms-link")).to_be_visible()
+    expect(joined).to_contain_text("Office holiday party")
+    expect(joined).to_contain_text("Nothing queued")
+    expect(joined.locator("a.room-name")).to_have_attribute("href", "/r/" + office["code"])
+    expect(joined.locator("summary")).to_have_text("1 closed room")
+    shot(page, "home-rooms")
+    hosting.get_by_role("button", name="Show 1 more").click()
+    expect(hosting.locator("ul.room-list > li")).to_have_count(5)
+    hosting.get_by_role("button", name="Forget Party 0 on this browser").click()
+    expect(hosting.locator("ul.room-list > li")).to_have_count(4)
+    assert page.evaluate(f"localStorage.getItem('kq:{hosted[0]['code']}')") is None
+    joined.locator("summary").click()
+    expect(joined).to_contain_text("Sunday sing-along")
+    joined.get_by_role("button", name="Forget closed rooms").click()
+    expect(joined.locator("summary")).to_have_count(0)
+    assert page.evaluate("localStorage.getItem('kq:ZZZZZZ')") is None
+
+    # On a phone the code tile becomes inline text.
+    page.set_viewport_size({"width": 390, "height": 844})
+    expect(hosting.locator(".room-tile").first).to_be_hidden()
+    expect(hosting.locator(".inline-code").first).to_be_visible()
+    no_overflow(page)
+    shot(page, "home-rooms-mobile")
+    context.close()
+
+    # A signed-in host sees their rooms on a device that didn't start them, and can host from it.
+    root = call("POST", "/api/admin/login", {"password": admin_password})["token"]
+    tokens = {}
+    for name in ("Sam", "Kit"):
+        call("POST", "/api/admin/users", {"name": name, "role": "host", "password": "long enough"}, root)
+        tokens[name] = call("POST", "/api/admin/login", {"name": name, "password": "long enough"})["token"]
+    room = call("POST", "/api/rooms", {"name": "Sam's birthday"}, tokens["Sam"])
+    for name, sees in (("Kit", False), ("Sam", True)):
+        context = browser.new_context(viewport={"width": 1440, "height": 1000}, reduced_motion="reduce")
+        page = context.new_page()
+        track(page)
+        page.goto(BASE)
+        page.evaluate("a => localStorage.setItem('kq:account', JSON.stringify(a))", {"token": tokens[name], "name": name})
+        page.reload()
+        section = page.locator("#your-rooms")
+        if not sees:
+            expect(section).to_contain_text("Nothing here yet.")
+            expect(section).not_to_contain_text("Sam's birthday")
+        else:
+            hosting = section.locator(".rooms-col").nth(0)
+            expect(hosting.locator("h3")).to_contain_text("On your account")
+            expect(section).to_contain_text("Signed in as Sam.")
+            hosting.get_by_role("link", name="Sam's birthday").click()
+            page.wait_for_url(f"**/r/{room['code']}/host")
+            expect(page.locator("#room-name")).to_have_text("Sam's birthday")
+        context.close()
 
 
 @contextmanager

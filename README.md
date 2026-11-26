@@ -96,6 +96,8 @@ For guests outside your network, use https and set `KARAQUEUE_PUBLIC_URL`, see [
 
 **Your songs, or YouTube's.** Point it at a folder of karaoke files (MP4, MP3+CDG, even old AVIs) and guests search it from their phone. Songs play from your server, so there are no ads and no buffering. Turn on yt-dlp and every YouTube request is downloaded before its turn comes up, and the keepers can be saved into the library for good.
 
+**Hop back in.** The home page lists your rooms: the ones you're hosting and the ones you joined, with who's singing and your place in line. Sign in as a host, or use a guest account, and they follow you to any phone. See [Your rooms](docs/rooms.md#your-rooms-on-the-home-page).
+
 **Pick a look.** Sunset, Midnight or Daylight, on any page. Each phone and TV keeps its own.
 
 **An admin page for the boring stuff.** Every setting, live, with no restart. Rooms, library folders and naming fixes, disk space, and inviting hosts and admins by link.

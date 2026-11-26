@@ -1,3 +1,4 @@
+import hashlib
 import time
 
 import pytest
@@ -302,3 +303,98 @@ def test_queued_videos_come_in_singing_order(room):
     assert store.queued_videos(code) == [ids["a1"], ids["s1"], ids["a2"], ids["s2"]]
     store.next(code, host)  # Alex sings; Sam is up
     assert store.queued_videos(code) == [ids["s1"], ids["a2"], ids["s2"]]
+
+
+# ---- #3335: rooms know which account started them ----
+
+def test_an_account_finds_only_its_own_rooms_and_can_host_them_from_another_device():
+    store = Store()
+    sam = store.add_user("Sam", "host", "x")
+    kit = store.add_user("Kit", "host", "x")
+    mine = store.create_room("Friday", owner_id=sam)
+    store.create_room("Kit's night", owner_id=kit)
+    store.create_room("Nobody's")
+    assert [r["code"] for r in store.owned_rooms(sam)] == [mine["code"]]
+    assert store.owned_rooms(None) == []  # the admin password isn't an account
+    sam_in, kit_in = store.start_staff_session(sam), store.start_staff_session(kit)
+    with pytest.raises(Error) as no:
+        store.owner_host_key(mine["code"], kit, kit_in)
+    assert no.value.status == 404
+    with pytest.raises(Error):
+        store.owner_host_key(mine["code"], None, sam_in)
+    with pytest.raises(Error) as no:  # the key has to come from the owner's own live sign-in
+        store.owner_host_key(mine["code"], sam, kit_in)
+    assert no.value.status == 401
+    second = store.owner_host_key(mine["code"].lower(), sam, sam_in)
+    assert store.is_host(mine["code"], second) and store.is_host(mine["code"], mine["host_token"])
+    # Only the newest few extra keys are kept; the room's first key always works.
+    for _ in range(5):
+        store.owner_host_key(mine["code"], sam, sam_in)
+    assert not store.is_host(mine["code"], second) and store.is_host(mine["code"], mine["host_token"])
+    # Signing out takes that sign-in's keys with it, but not the room's first key.
+    last = store.owner_host_key(mine["code"], sam, sam_in)
+    store.end_staff_sessions(token=sam_in)
+    assert not store.is_host(mine["code"], last) and store.is_host(mine["code"], mine["host_token"])
+    # Deleting the account leaves its rooms running, with no owner.
+    store.delete_user(sam)
+    assert store.owned_rooms(sam) == [] and store.state(mine["code"])["name"] == "Friday"
+
+
+def test_an_owner_key_stops_when_its_sign_in_runs_out_or_the_account_is_turned_off(monkeypatch):
+    store = Store()
+    sam = store.add_user("Sam", "host", "x")
+    code = store.create_room("Friday", owner_id=sam)["code"]
+    sign_in = store.start_staff_session(sam)
+    key = store.owner_host_key(code, sam, sign_in)
+    store.update_user(sam, disabled=1)  # even if nothing signed it out
+    assert not store.is_host(code, key)
+    store.update_user(sam, disabled=0)
+    assert store.is_host(code, key)
+    later = time.time() + 31 * 86400
+    monkeypatch.setattr(time, "time", lambda: later)
+    assert not store.is_host(code, key)
+
+
+def test_an_owner_key_stops_when_the_sign_in_provider_takes_host_access_away():
+    store = Store()
+    sam = store.oidc_user("https://login.example.com", "sam", "Sam", "host", "unused")
+    room = store.create_room("Friday", owner_id=sam)
+    key = store.owner_host_key(room["code"], sam, store.start_staff_session(sam))
+    assert store.is_host(room["code"], key)
+    with pytest.raises(Error) as no:
+        store.oidc_user("https://login.example.com", "sam", "Sam", "none", "unused")
+    assert no.value.status == 403
+    assert not store.is_host(room["code"], key) and store.is_host(room["code"], room["host_token"])
+
+
+def test_owner_keys_from_before_sign_ins_owned_them_are_dropped_on_upgrade(tmp_path):
+    import sqlite3
+    db = str(tmp_path / "kq.db")
+    store = Store(db)
+    room = store.create_room("Friday", owner_id=store.add_user("Sam", "host", "x"))
+    store.db.close()
+    old = sqlite3.connect(db)
+    old.execute("DROP TABLE host_tokens")
+    old.execute("CREATE TABLE host_tokens (token_hash TEXT PRIMARY KEY, "
+                "room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE, created_at REAL NOT NULL)")
+    old.execute("INSERT INTO host_tokens VALUES (?, 1, 1)", (hashlib.sha256(b"old key").hexdigest(),))
+    old.commit()
+    old.close()
+    store = Store(db)
+    assert store.db.execute("SELECT COUNT(*) FROM host_tokens").fetchone()[0] == 0
+    assert not store.is_host(room["code"], "old key") and store.is_host(room["code"], room["host_token"])
+
+
+def test_rooms_from_before_owners_upgrade_and_stay_valid(tmp_path):
+    import sqlite3
+    db = str(tmp_path / "kq.db")
+    old = sqlite3.connect(db)
+    old.execute("CREATE TABLE rooms (id INTEGER PRIMARY KEY, code TEXT NOT NULL UNIQUE, name TEXT NOT NULL, "
+                "host_hash TEXT NOT NULL, paused INTEGER NOT NULL DEFAULT 0, current_song_id INTEGER, "
+                "last_singer_id INTEGER, created_at REAL NOT NULL, touched_at REAL)")
+    old.execute("INSERT INTO rooms (code, name, host_hash, created_at) VALUES ('ABC234', 'Old party', 'x', 1)")
+    old.commit()
+    old.close()
+    store = Store(db)
+    assert store.state("ABC234")["name"] == "Old party" and store.state("ABC234")["touched_at"] == 1
+    assert store.owned_rooms(store.add_user("Sam", "host", "x")) == []

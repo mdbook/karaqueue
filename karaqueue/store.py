@@ -23,7 +23,8 @@ CREATE TABLE IF NOT EXISTS rooms (
     current_song_id INTEGER,
     last_singer_id INTEGER,
     created_at REAL NOT NULL,
-    touched_at REAL
+    touched_at REAL,
+    owner_id INTEGER REFERENCES users(id) ON DELETE SET NULL  -- the account that started it, if signed in
 );
 CREATE TABLE IF NOT EXISTS singers (
     id INTEGER PRIMARY KEY,
@@ -113,6 +114,13 @@ CREATE TABLE IF NOT EXISTS singer_tokens (
     singer_id INTEGER NOT NULL REFERENCES singers(id) ON DELETE CASCADE,
     created_at REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS host_tokens (
+    token_hash TEXT PRIMARY KEY,  -- more host keys, for the owner's other devices
+    room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+    created_at REAL NOT NULL,
+    -- the owner's sign-in that made it: signing out, or anything else that ends it, takes the key too
+    session_hash TEXT NOT NULL REFERENCES staff_sessions(token_hash) ON DELETE CASCADE
+);
 CREATE TABLE IF NOT EXISTS screens (
     room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
     display_id TEXT NOT NULL,
@@ -126,6 +134,7 @@ CREATE TABLE IF NOT EXISTS screens (
 ROOM_OPTIONS = {"songs_per_singer": None, "youtube": True, "library": True, "sound": "", "gap": 0}  # gap: seconds the screens wait between songs
 
 DEVICES = 5  # phones one singer can be signed in on at once; the oldest is signed out past that
+OWNED_ROOMS = 50  # rooms an account sees on the home page, newest first
 GUEST_SESSIONS = 10  # the same, for a guest account
 CLAIM_SECONDS = 600  # how long a "this is me" link works
 GUEST_SESSION_DAYS = 180  # a guest account stays signed in on a phone this long
@@ -216,6 +225,9 @@ class Store:
         # Or this one, from before recordings were tied to the song that just played.
         if "previous_song_id" not in [c[1] for c in self.db.execute("PRAGMA table_info(rooms)")]:
             self.db.execute("ALTER TABLE rooms ADD COLUMN previous_song_id INTEGER")
+        # Or this one, from before rooms knew which account started them. Older rooms have no owner.
+        if "owner_id" not in [c[1] for c in self.db.execute("PRAGMA table_info(rooms)")]:
+            self.db.execute("ALTER TABLE rooms ADD COLUMN owner_id INTEGER REFERENCES users(id) ON DELETE SET NULL")
         # Or this one, from before a take could be saved for a while after its song ended.
         if "ended_at" not in [c[1] for c in self.db.execute("PRAGMA table_info(songs)")]:
             self.db.execute("ALTER TABLE songs ADD COLUMN ended_at REAL")
@@ -231,6 +243,13 @@ class Store:
         # Or this, from before a link died with its maker's access.
         if "made_by_id" not in [c[1] for c in self.db.execute("PRAGMA table_info(invites)")]:
             self.db.execute("ALTER TABLE invites ADD COLUMN made_by_id INTEGER REFERENCES users(id) ON DELETE CASCADE")
+        # Or this, from before an owner's extra host keys went with the sign-in that made them.
+        # Keys made before then aren't tied to a sign-in, so they stop working; the owner gets a new one.
+        if "session_hash" not in [c[1] for c in self.db.execute("PRAGMA table_info(host_tokens)")]:
+            with self.db:
+                self.db.execute("ALTER TABLE host_tokens ADD COLUMN session_hash TEXT "
+                                "REFERENCES staff_sessions(token_hash) ON DELETE CASCADE")
+                self.db.execute("DELETE FROM host_tokens WHERE session_hash IS NULL")
         # Keep linked accounts with no provider access, without turning them off locally.
         if "'none'" not in self.db.execute("SELECT sql FROM sqlite_master WHERE name = 'users'").fetchone()[0]:
             self.db.commit()
@@ -319,7 +338,7 @@ class Store:
             room = self._room(code)
             if token:
                 digest = _hash(token)
-                if secrets.compare_digest(digest, room["host_hash"]):
+                if secrets.compare_digest(digest, room["host_hash"]) or self._owner_key(room, digest):
                     return "host", None
                 singer = self._one("SELECT id FROM singers WHERE room_id = ? AND token_hash = ?",
                                    room["id"], digest) or self._one(
@@ -328,6 +347,16 @@ class Store:
                 if singer:
                     return "singer", singer["id"]
         raise Error("Not signed in to this room", 401)
+
+    def _owner_key(self, room: sqlite3.Row, digest: str) -> bool:
+        """An extra host key works only while the owner's sign-in that made it is live, and that
+        account still owns the room, is turned on and may host."""
+        now = time.time()
+        return self._one("SELECT 1 FROM host_tokens h JOIN staff_sessions s ON s.token_hash = h.session_hash "
+                         "JOIN users u ON u.id = s.user_id WHERE h.room_id = ? AND h.token_hash = ? AND u.id = ? "
+                         "AND u.disabled = 0 AND u.role IN ('admin', 'host') AND s.seen_at > ? AND s.created_at > ?",
+                         room["id"], digest, room["owner_id"], now - STAFF_SESSION_DAYS * 86400,
+                         now - STAFF_SESSION_MAX_DAYS * 86400) is not None
 
     def is_host(self, code: str, token: Optional[str]) -> bool:
         with self.lock:
@@ -347,7 +376,8 @@ class Store:
 
     # -- rooms -------------------------------------------------------------------
 
-    def create_room(self, name: str) -> dict:
+    def create_room(self, name: str, owner_id: Optional[int] = None) -> dict:
+        """A new room. `owner_id` is the signed-in account starting it, so it can find the room later."""
         name = _clean(name, "Room name", self.text_limit)
         token = secrets.token_urlsafe(32)
         with self.lock, self.db:
@@ -357,9 +387,39 @@ class Store:
                     break
             else:
                 raise Error("Couldn't find a free room code, try again", 503)
-            self.db.execute("INSERT INTO rooms (code, name, host_hash, created_at) VALUES (?, ?, ?, ?)",
-                            (code, name, _hash(token), time.time()))
+            self.db.execute("INSERT INTO rooms (code, name, host_hash, created_at, owner_id) VALUES (?, ?, ?, ?, ?)",
+                            (code, name, _hash(token), time.time(), owner_id))
         return {"code": code, "host_token": token}
+
+    def owned_rooms(self, owner_id: Optional[int]) -> list:
+        """The rooms an account started, most recently used first. Only ever that account's own."""
+        if owner_id is None:
+            return []  # the built-in admin password isn't an account, so its rooms aren't kept
+        with self.lock:
+            rows = self.db.execute("SELECT code, name, created_at, COALESCE(touched_at, created_at) AS touched_at "
+                                   "FROM rooms WHERE owner_id = ? ORDER BY touched_at DESC LIMIT ?",
+                                   (owner_id, OWNED_ROOMS)).fetchall()
+            return [dict(r) for r in rows]
+
+    def owner_host_key(self, code: str, owner_id: Optional[int], session_token: Optional[str]) -> str:
+        """A new host key for a room this account started, so the owner can run it from another
+        device. It lasts only as long as the owner's sign-in `session_token` on that device.
+        The room's first key keeps working; the newest few extra keys are kept."""
+        token = secrets.token_urlsafe(32)
+        with self.lock, self.db:
+            room = self._one("SELECT id FROM rooms WHERE code = ? AND owner_id = ?", (code or "").upper(), owner_id) \
+                if owner_id is not None else None
+            if room is None:
+                raise Error("That isn't one of your rooms", 404)
+            session = _hash(session_token or "")
+            if not self._one("SELECT 1 FROM staff_sessions WHERE token_hash = ? AND user_id = ?", session, owner_id):
+                raise Error("Sign in first", 401)
+            self.db.execute("INSERT INTO host_tokens (token_hash, room_id, created_at, session_hash) VALUES (?, ?, ?, ?)",
+                            (_hash(token), room["id"], time.time(), session))
+            self.db.execute("DELETE FROM host_tokens WHERE room_id = ? AND token_hash NOT IN "
+                            "(SELECT token_hash FROM host_tokens WHERE room_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?)",
+                            (room["id"], room["id"], DEVICES))
+        return token
 
     def touch(self, code: str) -> None:
         with self.lock, self.db:
@@ -402,7 +462,7 @@ class Store:
             # hear it over their socket.
             del options["sound"]
             return {"code": room["code"], "name": room["name"], "paused": bool(room["paused"]),
-                    "now_playing": current, "up_next": up_next, "rotation": rotation, "options": options}
+                    "touched_at": room["touched_at"] or room["created_at"], "now_playing": current, "up_next": up_next, "rotation": rotation, "options": options}
 
     def queued_videos(self, code: str) -> list:
         """YouTube ids of every song still waiting in the room, in the order they will be sung (the
