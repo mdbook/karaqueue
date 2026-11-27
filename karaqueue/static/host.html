@@ -473,6 +473,7 @@
   const ECHOES = [[0, "Off"], [25, "Slap"], [60, "Big"]];
   const VOICES = [["normal", "Normal"], ["chipmunk", "Chipmunk"]];
   const MAX_MICS = 4;
+  const MAX_BOOST = 30; // dB, as in displays.py
   const STATE_TEXT = { idle: "Idle", playing: "Playing", paused: "Paused", buffering: "Loading", ended: "Finished" };
   const tiles = new Map(); // display id -> tile
   let guestUrl = location.origin + "/r/" + code;
@@ -570,6 +571,32 @@
       h("div", { class: "setting-body" }, h("div", { class: "setting-line" }, line), note || null));
   }
   const noteEl = () => h("p", { class: "setting-note", hidden: true });
+
+  // A live level meter for one mic: the bar is how loud it is, the tick the latest peak, and it
+  // goes red when the peaks hit the top. It empties when the screen stops sending levels.
+  const dbWidth = (db) => Math.max(0, Math.min(100, (db + 60) / 60 * 100)) + "%";
+  function meterEl(label) {
+    const tooLoud = h("span", { class: "mic-meter-clip", hidden: true }, "Too loud");
+    const bar = h("div", { class: "mic-meter", role: "meter", "aria-label": label, "aria-valuemin": -60, "aria-valuemax": 0, "aria-valuenow": -60 },
+      h("span", { class: "mic-meter-fill" }), h("span", { class: "mic-meter-peak" }));
+    const el = h("div", { class: "mic-meter-row" }, bar, tooLoud);
+    let hold = -60, heldAt = 0, clipAt = 0, quiet = null, shown = -60;
+    el.show = (level) => {
+      const now = performance.now(), peak = level ? level[1] : -60;
+      const avg = shown = level ? Math.max(level[0], shown - 3) : -60; // falls back slowly, like a real meter
+      if (peak >= hold || now - heldAt > 1500) { hold = peak; heldAt = now; }
+      if (level && peak >= 0) clipAt = now;
+      bar.style.setProperty("--level", dbWidth(avg));
+      bar.style.setProperty("--peak", dbWidth(hold));
+      bar.setAttribute("aria-valuenow", Math.min(0, avg));
+      const clipping = now - clipAt < 1500;
+      bar.classList.toggle("clip", clipping);
+      tooLoud.hidden = !clipping;
+      clearTimeout(quiet);
+      if (level) quiet = setTimeout(() => el.show(null), 600);
+    };
+    return el;
+  }
   function setNote(el, text) { el.textContent = text; el.hidden = !text; }
 
   function makeTile(d) {
@@ -674,8 +701,14 @@
     // of its inputs (a Scarlett 2i2 is one device with two). With none added, the default mic plays.
     const micList = h("div", { class: "mic-list" });
     const addMicBtn = h("button", { class: "ghost small", type: "button", onclick: () =>
-      setMics([...t.d.mics, { id: "", ch: 0, volume: 100, pan: 0 }], true) }, "Add a microphone");
+      setMics([...t.d.mics, { id: "", ch: 0, volume: 100, boost: 0, pan: 0 }], true) }, "Add a microphone");
     const micListNote = noteEl();
+    const defaultMeter = meterEl("Level of the default microphone");
+    // The screen's levels, about ten times a second, one per mic (the default mic when none are added).
+    t.levels = (levels) => {
+      if (!t.d.mics.length) return defaultMeter.show(levels[0]);
+      [...micList.children].forEach((row, i) => row.meter.show(levels[i]));
+    };
     let shownMics = "";
     function setMics(mics, now) {
       t.d = { ...t.d, mics };
@@ -703,6 +736,19 @@
           edit({ volume: Number(volume.value) });
         } });
       volume.style.setProperty("--fill", m.volume + "%");
+      const boostText = h("output", { class: "vol-text" });
+      const boostNote = noteEl();
+      const showBoost = (db) => {
+        boost.style.setProperty("--fill", db / MAX_BOOST * 100 + "%");
+        boostText.textContent = db ? "+" + db + " dB" : "Off";
+        setNote(boostNote, db > 20 ? "That much boost can squeal. Keep this mic behind the speakers." : "");
+      };
+      const boost = h("input", { type: "range", min: 0, max: MAX_BOOST, step: 1, value: m.boost || 0, class: "volume grow",
+        "aria-label": "Boost for microphone " + (i + 1), title: "Turns a quiet mic up. Double-click for none.",
+        oninput: () => { showBoost(Number(boost.value)); edit({ boost: Number(boost.value) }); },
+        ondblclick: () => { boost.value = 0; showBoost(0); edit({ boost: 0 }); } });
+      showBoost(m.boost || 0);
+      const meter = meterEl("Level of microphone " + (i + 1));
       const pan = h("input", { type: "range", min: -100, max: 100, step: 5, value: m.pan, class: "volume grow is-muted",
         "aria-label": "Left to right balance of microphone " + (i + 1), title: "Double-click to center",
         oninput: () => edit({ pan: Number(pan.value) }), ondblclick: () => { pan.value = 0; edit({ pan: 0 }); } });
@@ -711,8 +757,14 @@
       const row = h("div", { class: "mic-strip" },
         h("div", { class: "mic-pick" }, device, channel, remove),
         h("label", { class: "mic-slide" }, h("span", {}, "Level"), volume),
+        h("div", { class: "mic-slide" }, h("span", { "aria-hidden": "true" }), meter),
+        h("label", { class: "mic-slide" }, h("span", {}, "Boost"), boost, boostText),
+        boostNote,
         h("label", { class: "mic-slide" }, h("span", {}, "L"), pan, h("span", {}, "R")));
       row.volume = volume;
+      row.boost = boost;
+      row.showBoost = showBoost;
+      row.meter = meter;
       row.pan = pan;
       return row;
     }
@@ -729,7 +781,10 @@
         row.volume.value = mics[i].volume;
         row.volume.style.setProperty("--fill", mics[i].volume + "%");
         row.pan.value = mics[i].pan;
+        row.boost.value = mics[i].boost || 0;
+        row.showBoost(mics[i].boost || 0);
       });
+      defaultMeter.hidden = mics.length > 0 || !s.mic;
       addMicBtn.disabled = mics.length >= MAX_MICS;
       setNote(micListNote, !mics.length ? "Using the default microphone, in the middle. Add one to choose which mic, and set its level and balance."
         : !inputs.length ? (s.mic ? "The list fills in once the mic is open on the screen." : "Turn the mic on to list this screen's microphones.")
@@ -821,7 +876,7 @@
       h("div", { class: "segmented grow", role: "group", "aria-label": "Echo" }, echoButtons));
     const voiceSetting = setting(id, "voice", "Voice",
       h("div", { class: "segmented grow", role: "group", "aria-label": "Voice" }, voiceButtons));
-    const micsSetting = setting(id, "mics", "Microphones", [micList, addMicBtn], micListNote);
+    const micsSetting = setting(id, "mics", "Microphones", [defaultMeter, micList, addMicBtn], micListNote);
     const recSetting = setting(id, "record", "Record", [recBtn, recText], recNote);
     const keyNote = noteEl();
     const keySetting = setting(id, "key", "Song key",
@@ -1201,11 +1256,19 @@
   $("copy-guest").onclick = act(async () => { await copyText(guestUrl); flash("Guest link copied", "ok"); });
   loadJoinInfo().then(findLaunchers);
   loadConfig();
+  // Live mic meters come over the socket while this page is in view.
+  let liveSock = null;
+  const watchMeters = () => {
+    const saved = keys.get(code);
+    if (liveSock && liveSock.readyState === 1 && saved) liveSock.send(JSON.stringify({ type: "watch", host: saved.token, on: !document.hidden }));
+  };
+  document.addEventListener("visibilitychange", watchMeters);
   live(() => { refresh(); refreshRecordings(); }, {
-    onopen: () => { refreshDisplays(); refreshWaiting(); },
+    onopen: (ws) => { liveSock = ws; watchMeters(); refreshDisplays(); refreshWaiting(); },
     onmessage: (msg) => {
       if (msg.type === "displays") refreshDisplays();
       else if (msg.type === "waiting") refreshWaiting();
+      else if (msg.type === "levels" && Array.isArray(msg.levels)) { const tile = tiles.get(msg.display); if (tile && tile.levels) tile.levels(msg.levels); }
     },
   });
 </script>

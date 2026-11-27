@@ -5,6 +5,7 @@
   const CHIPMUNK_SEMITONES = 8;
   const GRAIN = 0.07; // seconds per pitch-shift window; shorter warbles, longer smears
   const ECHO_TIME = 0.28; // seconds between echoes
+  const MAX_BOOST = 30; // dB a quiet mic can be turned up past its plain level; displays.py has the same
 
   // A made-up room: noise that fades out. Longer and slower fades sound like bigger rooms.
   function impulse(ctx, seconds, decay) {
@@ -76,20 +77,32 @@
     sum.connect(mix);
 
     // One mic: channel `ch` (1 and up) of `source`, or all its channels summed when ch is 0. It has
-    // its own volume and left to right balance (volume 0 to 100, pan -100 to 100).
+    // its own volume, boost and left to right balance (volume 0 to 100, boost 0 to MAX_BOOST dB,
+    // pan -100 to 100). level() is what it puts into the mix right now, for the host's meter.
     function add(source, channels, ch) {
       const split = ctx.createChannelSplitter(Math.max(1, Math.min(channels || 1, 8)));
-      const gain = ctx.createGain(), panner = ctx.createStereoPanner();
+      const gain = ctx.createGain(), panner = ctx.createStereoPanner(), meter = ctx.createAnalyser();
+      const samples = new Float32Array(meter.fftSize = 4096); // about the time between two meter reports
       source.connect(split);
       for (let i = 0; i < split.numberOfOutputs; i++) if (!ch || ch - 1 === i) split.connect(gain, i);
       gain.connect(panner).connect(bus);
+      gain.connect(meter);
       return {
         set(m) {
           // The panner takes a little off the middle, so give it back.
-          gain.gain.setTargetAtTime((m.volume / 100) * Math.SQRT2, ctx.currentTime, 0.02);
+          const boost = Math.pow(10, Math.max(0, Math.min(MAX_BOOST, m.boost || 0)) / 20);
+          gain.gain.setTargetAtTime((m.volume / 100) * boost * Math.SQRT2, ctx.currentTime, 0.02);
           panner.pan.setTargetAtTime(Math.max(-1, Math.min(1, m.pan / 100)), ctx.currentTime, 0.02);
         },
-        remove() { try { source.disconnect(split); split.disconnect(); gain.disconnect(); panner.disconnect(); } catch {} },
+        // [average, peak] in dB below full scale (0 is as loud as the speakers go before clipping).
+        level() {
+          meter.getFloatTimeDomainData(samples);
+          let sum = 0, peak = 0;
+          for (const x of samples) { sum += x * x; peak = Math.max(peak, Math.abs(x)); }
+          const db = (v) => Math.round(Math.max(-60, Math.min(12, 20 * Math.log10(v / Math.SQRT2 || 1e-6))));
+          return [db(Math.sqrt(sum / samples.length)), db(peak)];
+        },
+        remove() { try { source.disconnect(split); split.disconnect(); gain.disconnect(); panner.disconnect(); meter.disconnect(); } catch {} },
       };
     }
 
@@ -109,5 +122,5 @@
     return { mix, set, add };
   }
 
-  window.KQVoice = { build, shifter: chipmunk, CHIPMUNK_SEMITONES };
+  window.KQVoice = { build, shifter: chipmunk, CHIPMUNK_SEMITONES, MAX_BOOST };
 })();

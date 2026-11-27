@@ -90,7 +90,7 @@ For guests outside your network, use https and set `KARAQUEUE_PUBLIC_URL`, see [
 
 ![The host page: who's singing, the rotation, and the join code](docs/screenshots/host-queue.png)
 
-**Any browser is a screen.** A smart TV, a laptop on a projector, an old tablet at the bar. Each one can show the video, the line-up, a giant join code, or a singer monitor, and the host controls them all from one panel: layout, volume, which speakers, up to four mics with their own levels and balance, reverb, echo, a chipmunk voice, and recording. Cast to a Chromecast or throw one onto a second monitor straight from the panel.
+**Any browser is a screen.** A smart TV, a laptop on a projector, an old tablet at the bar. Each one can show the video, the line-up, a giant join code, or a singer monitor, and the host controls them all from one panel: layout, volume, which speakers, up to four mics with their own levels, live meters, boost and balance, reverb, echo, a chipmunk voice, and recording. Cast to a Chromecast or throw one onto a second monitor straight from the panel.
 
 ![The Queue layout on a TV](docs/screenshots/tv-queue.png)
 

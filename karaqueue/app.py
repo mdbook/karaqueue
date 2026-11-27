@@ -1389,7 +1389,7 @@ def create_app(store: Optional[Store] = None) -> FastAPI:
     @app.websocket("/ws/{code}")
     async def socket(ws: WebSocket, code: str):
         # The server pushes "something changed" and clients refetch what they're allowed to see.
-        # The only thing a client can say back is a screen describing itself.
+        # A client can say back only two things: a screen describing itself, or the host asking for mic levels.
         # Accepting before closing lets the page see why (closing first reaches it as 1006).
         scale, who = cfg.get("rate_limit"), address(ws)
         await ws.accept()

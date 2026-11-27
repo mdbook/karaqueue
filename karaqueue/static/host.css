@@ -176,6 +176,17 @@ button.ghost[aria-pressed="true"]:hover { background: var(--control); }
 .mic-slide { display: flex; align-items: center; gap: .5rem; color: var(--muted); font-size: var(--fs-small); }
 .mic-slide > span { min-width: 1rem; }
 .mic-slide input { min-width: 0; }
+.mic-slide > span:first-child { min-width: 2.6rem; }
+.mic-meter-row { display: flex; flex: 1 1 0; align-items: center; gap: .5rem; min-width: 0; }
+.mic-meter-row[hidden] { display: none; }
+/* The bar fills to --level and the tick sits at --peak, both set by the page from the screen's levels. */
+.mic-meter { position: relative; flex: 1 1 0; height: 6px; border-radius: 3px; background: var(--raised); overflow: hidden; }
+.mic-meter-fill { position: absolute; inset: 0; clip-path: inset(0 calc(100% - var(--level, 0%)) 0 0);
+  background: linear-gradient(to right, var(--positive) 0 80%, var(--warning) 80% 95%, var(--negative) 95%); transition: clip-path 90ms linear; }
+.mic-meter-peak { position: absolute; top: 0; bottom: 0; left: var(--peak, 0%); width: 2px; margin-left: -2px; background: var(--text); opacity: .7; }
+.mic-meter.clip { outline: 1px solid var(--negative); outline-offset: 1px; }
+.mic-meter-clip { color: var(--negative); font-size: var(--fs-small); white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { .mic-meter-fill { transition: none; } }
 .tv-time { color: var(--muted); font-size: var(--fs-body); font-variant-numeric: tabular-nums; padding-left: .25rem; }
 .vol-text { min-width: 3.25rem; text-align: right; color: var(--muted); font-size: var(--fs-body); font-variant-numeric: tabular-nums; }
 .setting select { min-height: var(--line-h); }

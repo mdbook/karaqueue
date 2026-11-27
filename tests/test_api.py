@@ -207,12 +207,13 @@ def test_screens_show_up_for_the_host_and_take_commands():
         res = client.patch(url, headers=host, json={"voice": "chipmunk", "echo": 250})
         assert res.json()["voice"] == "chipmunk" and res.json()["echo"] == 100
         assert command()["settings"]["voice"] == "chipmunk"
-        mics = [{"id": "usb-1", "ch": 1, "volume": 90, "pan": -100}, {"id": "usb-1", "ch": 2, "volume": 150, "pan": 300}]
+        mics = [{"id": "usb-1", "ch": 1, "volume": 90, "pan": -100, "boost": 12},
+                {"id": "usb-1", "ch": 2, "volume": 150, "pan": 300, "boost": 99}]
         res = client.patch(url, headers=host, json={"mics": mics})
-        assert res.json()["mics"] == [{"id": "usb-1", "ch": 1, "volume": 90, "pan": -100},
-                                      {"id": "usb-1", "ch": 2, "volume": 100, "pan": 100}]
+        assert res.json()["mics"] == [{"id": "usb-1", "ch": 1, "volume": 90, "boost": 12, "pan": -100},
+                                      {"id": "usb-1", "ch": 2, "volume": 100, "boost": 30, "pan": 100}]
         assert command()["settings"]["mics"][1]["pan"] == 100
-        for bad in ([{"id": "a", "ch": 0}] * 5, [{"id": 7}], ["usb-1"], [{"id": "a", "ch": 9}], [{"id": "a", "pan": "left"}],
+        for bad in ([{"id": "a", "ch": 0}] * 5, [{"id": 7}], ["usb-1"], [{"id": "a", "ch": 9}], [{"id": "a", "pan": "left"}], [{"id": "a", "boost": "loud"}],
                     [{"id": "x" * 201}]):
             assert client.patch(url, headers=host, json={"mics": bad}).status_code == 400, bad
         assert client.patch(url, headers=host, json={"mics": "usb-1"}).status_code == 422

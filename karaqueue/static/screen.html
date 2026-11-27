@@ -145,6 +145,7 @@
     showPairing(null);
     uploadKey = msg.upload || null;
     if (msg.settings) display.record = !!msg.settings.record;
+    meters = !!msg.meters;
     onSound({ display: msg.sound, leader: msg.leader });
     syncRecording();
   }
@@ -333,6 +334,12 @@
     });
     return m.queue;
   }
+
+  // While the host page is showing its mic meters, say how loud each mic is, ten times a second.
+  let meters = false;
+  setInterval(() => {
+    if (meters && mic && micState === "on") send({ type: "levels", levels: mic.strips.map((s) => s.level ? s.level() : null) });
+  }, 100);
 
   async function startMic(rate) {
     const ctx = new AudioContext(rate ? { latencyHint: "interactive", sampleRate: rate } : { latencyHint: "interactive" });
@@ -991,6 +998,7 @@
       else if (msg.type === "welcome") onWelcome(msg);
       else if (msg.type === "waiting" && msg.code) showPairing(msg.code); // without a code it's news for the host page
       else if (msg.type === "sound") onSound(msg);
+      else if (msg.type === "meters") meters = !!msg.on;
       else if (msg.type === "removed") {
         // The host took this screen out: forget its key and ask to be let in again.
         localStorage.removeItem(screenKey);

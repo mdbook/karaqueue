@@ -22,7 +22,7 @@ async (opts) => {
   osc.buffer = buffer;
   if (key) { osc.connect(key.input); key.output.connect(ctx.destination); }
   const strip = chain.add(osc, 1, 0);
-  strip.set({ volume: opts.silence_mic ? 0 : 100, pan: opts.pan || 0 });
+  strip.set({ volume: opts.silence_mic ? 0 : 100, pan: opts.pan || 0, boost: opts.boost || 0 });
   chain.set({ volume: 100, reverb: 0, echo: opts.echo || 0, voice: opts.voice || "normal", muted: false });
   chain.mix.connect(ctx.destination);
   osc.start();
@@ -42,7 +42,7 @@ async (opts) => {
     for (let i = Math.floor(rate * (t - 0.01)); i < Math.floor(rate * (t + 0.01)); i++) peak = Math.max(peak, Math.abs(left[i]));
     echo.push(peak);
   }
-  return { hz: crossings / (opts.seconds - opts.from), energyL, energyR, echo };
+  return { hz: crossings / (opts.seconds - opts.from), energyL, energyR, echo, level: strip.level() };
 }
 """
 
@@ -86,3 +86,13 @@ def test_song_key_shifter_moves_the_pitch(render, semitones):
     # With the mic strip silenced, what's left is the shifter's own output.
     out = render(key=semitones, silence_mic=True)
     assert out["hz"] == pytest.approx(440 * 2 ** (semitones / 12), rel=0.06)
+
+
+def test_meter_reads_the_mic_level_and_boost_turns_it_up(render):
+    # A 0.3 sine: about -13 dB average and -10 dB peak, against full scale.
+    average, peak = render()["level"]
+    assert average == pytest.approx(-13.5, abs=1) and peak == pytest.approx(-10.5, abs=1)
+    boosted = render(boost=12)["level"]
+    assert boosted[0] == pytest.approx(average + 12, abs=1)
+    assert render(boost=30)["level"][1] == 12  # far past the top reads as the top
+    assert render(silence_mic=True)["level"] == [-60, -60]

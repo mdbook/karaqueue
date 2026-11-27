@@ -39,6 +39,7 @@ MAX_SOCKETS = 300  # ponytail: per room; a big party is well under this. Per add
 MAX_OUTPUTS = 20
 MAX_MICS = 4  # microphones one screen mixes at once
 MAX_CHANNELS = 8  # inputs on one audio interface a mic can come from
+MAX_BOOST = 30  # dB a quiet mic can be turned up past its plain level; kq-voice.js has the same
 SEND_TIMEOUT = 5  # seconds a socket gets to take a message before it's dropped
 MAX_TEXT = 200
 _ID = re.compile(r"^[A-Za-z0-9-]{8,40}$")
@@ -87,7 +88,7 @@ def settings(raw: dict, current: Optional[dict] = None) -> dict:
 
 
 def _mics(raw) -> list:
-    """The mic strips a screen mixes: which device and channel, and each one's level and balance."""
+    """The mic strips a screen mixes: which device and channel, and each one's level, boost and balance."""
     if not isinstance(raw, list) or len(raw) > MAX_MICS:
         raise Error(f"A screen mixes up to {MAX_MICS} microphones")
     out = []
@@ -97,9 +98,10 @@ def _mics(raw) -> list:
         try:
             mic = {"id": item.get("id", ""), "ch": int(item.get("ch", 0)),
                    "volume": max(0, min(100, int(item.get("volume", 100)))),
+                   "boost": max(0, min(MAX_BOOST, int(item.get("boost", 0)))),
                    "pan": max(-100, min(100, int(item.get("pan", 0))))}
         except (TypeError, ValueError):
-            raise Error("A microphone's channel, volume and balance must be numbers")
+            raise Error("A microphone's channel, volume, boost and balance must be numbers")
         if not isinstance(mic["id"], str) or len(mic["id"]) > MAX_TEXT:
             raise Error("Microphone must be one of the devices the screen reported")
         if not 0 <= mic["ch"] <= MAX_CHANNELS:
@@ -138,6 +140,8 @@ class Hub:
         self.waiting: Dict[str, Dict[str, dict]] = {}
         # room code -> (display id, song id) pairs already saved, so each screen saves a song once
         self.uploaded: Dict[str, Set[tuple]] = {}
+        # room code -> host sockets showing mic meters. Screens send levels only while there's one.
+        self.watchers: Dict[str, Set[WebSocket]] = {}
 
     async def send(self, code: str, message: dict) -> None:
         # All at once, so one slow phone doesn't hold up everyone else's update.
@@ -161,6 +165,8 @@ class Hub:
     async def disconnect(self, code: str, ws: WebSocket) -> None:
         code = code.upper()
         self.rooms.get(code, set()).discard(ws)
+        if ws in self.watchers.get(code, set()):
+            await self._watch(code, ws, False)
         room = self.displays.get(code, {})
         leader = self.leader(code)
         for display_id, display in list(room.items()):
@@ -245,7 +251,8 @@ class Hub:
         room[display_id] = {"ws": ws, "settings": saved, "status": {"state": "idle", "mic_state": "unsupported", "recording": False, "reason": ""},
                             "audio": "unsupported", "picker": False, "outputs": [], "inputs": [], "upload": upload, "panel": info.get("panel") is True}
         welcome = {"type": "welcome", "upload": upload, "settings": saved,
-                   "sound": self.store.sound(code), "leader": self.leader(code)}
+                   "sound": self.store.sound(code), "leader": self.leader(code),
+                   "meters": bool(self.watchers.get(code))}
         if key:
             welcome["key"] = key  # the screen keeps it, to come back without asking again
         await ws.send_json(welcome)
@@ -295,6 +302,16 @@ class Hub:
             return ""  # the admin can remove a room while its screens are still connected
         return sound if sound in eligible else next(iter(eligible), "")
 
+    async def _watch(self, code: str, ws: WebSocket, on: bool) -> None:
+        """Start or stop sending mic levels to a host socket. Screens hear when the first host starts
+        watching and the last one stops, so nobody streams levels to an empty room."""
+        watchers = self.watchers.setdefault(code, set())
+        before = bool(watchers)
+        (watchers.add if on else watchers.discard)(ws)
+        if before != bool(watchers):
+            for display in list(self.displays.get(code, {}).values()):
+                await _try_send(display["ws"], {"type": "meters", "on": bool(watchers)})
+
     async def send_sound(self, code: str, skip: Optional[WebSocket] = None) -> None:
         sound = self.store.sound(code)
         leader = self.leader(code)
@@ -335,6 +352,23 @@ class Hub:
                         "reason": _name(message.get("reason"), MAX_TEXT, "") if state == "error" else "",
                     }
                     await self.send(code, {"type": "displays"})
+        elif kind == "watch":
+            # A host page asking for live mic levels. Only the host gets them.
+            host = message.get("host") if isinstance(message.get("host"), str) else None
+            on = message.get("on") is not False
+            if not on or await asyncio.to_thread(self.store.is_host, code, host):
+                await self._watch(code, ws, on)
+        elif kind == "levels":
+            # A screen's mics, about ten times a second: [average, peak] dB per mic, or null for one
+            # that isn't open. Passed straight to the watching hosts, never stored.
+            sender = next((i for i, d in room.items() if d["ws"] is ws), None)
+            levels = _levels(message.get("levels"))
+            if sender is None or levels is None:
+                return
+            out = {"type": "levels", "display": sender, "levels": levels}
+            for watcher in list(self.watchers.get(code, ())):
+                if not await _try_send(watcher, out):
+                    self.watchers.get(code, set()).discard(watcher)
         elif kind == "ended":
             # A screen opened from the host's browser moves the show along itself; one the host
             # let in by its code says so here. The song id makes two screens finishing the same
@@ -423,6 +457,22 @@ async def _try_send(ws: WebSocket, message: dict) -> bool:
         except Exception:
             pass
         return False
+
+
+def _levels(raw) -> Optional[list]:
+    """A screen's mic levels: up to MAX_MICS entries, each [average, peak] in -60 to 12 dB, or None."""
+    if not isinstance(raw, list) or len(raw) > MAX_MICS:
+        return None
+    out = []
+    for item in raw:
+        if item is None:
+            out.append(None)
+        elif (isinstance(item, list) and len(item) == 2
+              and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in item)):
+            out.append([max(-60, min(12, round(v))) for v in item])
+        else:
+            return None
+    return out
 
 
 def _seconds(value) -> Optional[float]:

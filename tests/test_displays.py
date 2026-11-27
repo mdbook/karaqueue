@@ -265,3 +265,40 @@ for (const leader of ["first-screen", "second-screen"]) {
 }
 """
     subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True)
+
+
+def test_mic_levels_go_only_to_watching_hosts_and_screens_send_them_only_while_watched():
+    async def check():
+        hub, code, host = room()
+        screen = await admit(hub, code, host, "tv-screen", mic=True)
+        assert screen.messages[0]["meters"] is False
+        guest, stranger, watcher = Socket(), Socket(), Socket()
+        for ws in (guest, stranger, watcher):
+            hub.connect(code, ws)
+
+        # A wrong host key doesn't get levels, and doesn't wake the screens.
+        await hub.receive(code, stranger, {"type": "watch", "host": "not-the-key"})
+        assert not any(m["type"] == "meters" for m in screen.messages)
+        await hub.receive(code, watcher, {"type": "watch", "host": host})
+        assert screen.messages[-1] == {"type": "meters", "on": True}
+        assert (await admit(hub, code, host, "second-screen")).messages[0]["meters"] is True
+
+        await hub.receive(code, screen, {"type": "levels", "levels": [[-20, -6], None, [-90, 40.4]]})
+        assert watcher.messages[-1] == {"type": "levels", "display": "tv-screen", "levels": [[-20, -6], None, [-60, 12]]}
+        for ws in (guest, stranger):
+            assert not any(m["type"] == "levels" for m in ws.messages)
+
+        # Junk, and levels from a socket that isn't a screen, go nowhere.
+        before = len(watcher.messages)
+        for bad in ([[-20]], [[-20, "loud"]], [[True, -6]], [[-20, -6]] * 5, "loud"):
+            await hub.receive(code, screen, {"type": "levels", "levels": bad})
+        await hub.receive(code, guest, {"type": "levels", "levels": [[-20, -6]]})
+        assert len(watcher.messages) == before
+
+        # The last host leaving (or looking away) tells the screens to stop.
+        await hub.receive(code, watcher, {"type": "watch", "host": host, "on": False})
+        assert screen.messages[-1] == {"type": "meters", "on": False}
+        await hub.receive(code, watcher, {"type": "watch", "host": host})
+        await hub.disconnect(code, watcher)
+        assert screen.messages[-1] == {"type": "meters", "on": False}
+    asyncio.run(check())
